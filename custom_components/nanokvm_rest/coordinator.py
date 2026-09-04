@@ -4,24 +4,36 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+import logging
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import NanoKVMAuthError, NanoKVMClient, NanoKVMError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class NanoKVMCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinate NanoKVM polling."""
 
-    def __init__(self, hass: HomeAssistant, client: NanoKVMClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        client: NanoKVMClient,
+        scan_interval: int = DEFAULT_SCAN_INTERVAL,
+    ) -> None:
         super().__init__(
             hass,
-            logger=__import__("logging").getLogger(__name__),
+            logger=_LOGGER,
+            config_entry=entry,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
 
@@ -34,7 +46,7 @@ class NanoKVMCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.client.async_get_hostname(),
             )
         except NanoKVMAuthError as err:
-            raise UpdateFailed(f"Authentication failed: {err}") from err
+            raise ConfigEntryAuthFailed("NanoKVM authentication failed") from err
         except NanoKVMError as err:
             raise UpdateFailed(str(err)) from err
 
