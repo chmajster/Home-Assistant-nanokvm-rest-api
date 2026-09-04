@@ -1,0 +1,19 @@
+name: "NanoKVM REST"
+slug: "nanokvm_rest"
+description: >-
+  Installs the NanoKVM REST custom integration into Home Assistant.
+version: "0.3.0"
+url: "https://github.com/chmajster/homeassistant-nanokvm-rest-api"
+arch:
+  - amd64
+  - aarch64
+startup: once
+boot: manual_only
+init: false
+stage: stable
+homeassistant: "2026.8.0"
+map:
+  - type: homeassistant_config
+    read_only: false
+options: {}
+schema: {}
