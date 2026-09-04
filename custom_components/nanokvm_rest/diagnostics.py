@@ -12,7 +12,7 @@ from . import NanoKVMConfigEntry
 from .const import CONF_BASE_URL
 
 _ENTRY_REDACT = {CONF_BASE_URL, CONF_USERNAME, CONF_PASSWORD}
-_DATA_REDACT = {"ips", "addr"}
+_DATA_REDACT = {"ips", "addr", "username", "mdns"}
 
 
 async def async_get_config_entry_diagnostics(
