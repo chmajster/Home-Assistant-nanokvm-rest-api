@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS, DEFAULT_POWER_PRESS_MS
@@ -20,34 +21,40 @@ async def async_setup_entry(
     """Set up NanoKVM buttons."""
     coordinator: NanoKVMCoordinator = entry.runtime_data
     force_off_ms = int(entry.options.get(CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS))
-    async_add_entities(
-        [
-            NanoKVMButton(
-                coordinator,
-                "Power",
-                "power",
-                DEFAULT_POWER_PRESS_MS,
-                "mdi:power",
-            ),
-            NanoKVMButton(
-                coordinator,
-                "Reset",
-                "reset",
-                DEFAULT_POWER_PRESS_MS,
-                "mdi:restart",
-            ),
-            NanoKVMButton(
-                coordinator,
-                "Force off",
-                "power",
-                force_off_ms,
-                "mdi:power-plug-off",
-            ),
-        ]
-    )
+    entities: list[ButtonEntity] = [
+        NanoKVMGPIOButton(
+            coordinator,
+            "Power",
+            "power",
+            DEFAULT_POWER_PRESS_MS,
+            "mdi:power",
+        ),
+        NanoKVMGPIOButton(
+            coordinator,
+            "Reset",
+            "reset",
+            DEFAULT_POWER_PRESS_MS,
+            "mdi:restart",
+        ),
+        NanoKVMGPIOButton(
+            coordinator,
+            "Force off",
+            "power",
+            force_off_ms,
+            "mdi:power-plug-off",
+        ),
+    ]
+
+    capabilities = coordinator.data.get("capabilities", {})
+    if capabilities.get("pcie") and coordinator.data.get("hdmi") is not None:
+        entities.append(NanoKVMResetHDMIButton(coordinator))
+    if capabilities.get("admin"):
+        entities.append(NanoKVMRebootButton(coordinator))
+
+    async_add_entities(entities)
 
 
-class NanoKVMButton(NanoKVMEntity, ButtonEntity):
+class NanoKVMGPIOButton(NanoKVMEntity, ButtonEntity):
     """NanoKVM GPIO action button."""
 
     def __init__(
@@ -72,3 +79,37 @@ class NanoKVMButton(NanoKVMEntity, ButtonEntity):
             self._button_type, self._duration_ms
         )
         await self.coordinator.async_request_refresh()
+
+
+class NanoKVMResetHDMIButton(NanoKVMEntity, ButtonEntity):
+    """Reset the HDMI subsystem on PCIe NanoKVM hardware."""
+
+    _attr_name = "Reset HDMI"
+    _attr_icon = "mdi:video-input-hdmi"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_reset_hdmi"
+
+    async def async_press(self) -> None:
+        """Reset HDMI and refresh state."""
+        await self.coordinator.client.async_reset_hdmi()
+        await self.coordinator.async_request_refresh()
+
+
+class NanoKVMRebootButton(NanoKVMEntity, ButtonEntity):
+    """Reboot the NanoKVM device itself."""
+
+    _attr_name = "Reboot NanoKVM"
+    _attr_icon = "mdi:restart-alert"
+    _attr_device_class = ButtonDeviceClass.RESTART
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_reboot"
+
+    async def async_press(self) -> None:
+        """Reboot NanoKVM."""
+        await self.coordinator.client.async_reboot()
