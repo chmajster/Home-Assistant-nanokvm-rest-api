@@ -14,30 +14,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run HACS validation
+
+      - name: Validate private-repository HACS structure
         shell: bash
-        env:
-          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_REPOSITORY: ${{ github.repository }}
-          INPUT_CATEGORY: integration
-          INPUT_IGNORE: brands description topics
-          INPUT_COMMENT: "false"
-          REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          set -o pipefail
-          docker run --rm \
-            -e INPUT_GITHUB_TOKEN \
-            -e INPUT_REPOSITORY \
-            -e INPUT_CATEGORY \
-            -e INPUT_IGNORE \
-            -e INPUT_COMMENT \
-            -e REPOSITORY_REF \
-            ghcr.io/hacs/action:main 2>&1 | tee hacs.log
-      - name: Upload HACS validation log
-        if: always()
-        uses: actions/upload-artifact@v4
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path(".")
+          for required in ("README.md", "LICENSE", "hacs.json"):
+              if not (root / required).is_file():
+                  raise SystemExit(f"Missing required file: {required}")
+
+          hacs = json.loads((root / "hacs.json").read_text(encoding="utf-8"))
+          if not isinstance(hacs, dict) or not isinstance(hacs.get("name"), str) or not hacs["name"].strip():
+              raise SystemExit("hacs.json must contain a non-empty name")
+
+          manifests = list((root / "custom_components").glob("*/manifest.json"))
+          if len(manifests) != 1:
+              raise SystemExit(f"Expected exactly one integration manifest, found {len(manifests)}")
+
+          manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+          required_manifest = (
+              "domain",
+              "name",
+              "version",
+              "documentation",
+              "codeowners",
+              "integration_type",
+              "iot_class",
+          )
+          missing = [key for key in required_manifest if not manifest.get(key)]
+          if missing:
+              raise SystemExit(f"manifest.json is missing required values: {', '.join(missing)}")
+          if manifest.get("config_flow") is not True:
+              raise SystemExit("manifest.json must set config_flow to true")
+
+          print(f"HACS structure OK: {manifest['domain']} {manifest['version']}")
+          PY
+          python -m compileall -q custom_components/nanokvm_rest
+
+      - name: Run official HACS validation for public repository
+        if: ${{ github.event.repository.private == false }}
+        uses: hacs/action@main
         with:
-          name: hacs-validation-log
-          path: hacs.log
-          if-no-files-found: ignore
-          retention-days: 1
+          category: integration
+          ignore: brands description topics
