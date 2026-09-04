@@ -16,8 +16,12 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Set up NanoKVM binary sensors."""
     coordinator: NanoKVMCoordinator = entry.runtime_data
-    async_add_entities([NanoKVMPowerSensor(coordinator), NanoKVMHDDSensor(coordinator)])
+    entities: list[BinarySensorEntity] = [NanoKVMPowerSensor(coordinator)]
+    if "hdd" in coordinator.data.get("gpio", {}):
+        entities.append(NanoKVMHDDSensor(coordinator))
+    async_add_entities(entities)
 
 
 class NanoKVMPowerSensor(NanoKVMEntity, BinarySensorEntity):
@@ -32,6 +36,7 @@ class NanoKVMPowerSensor(NanoKVMEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
+        """Return target power state."""
         return bool(self.coordinator.data.get("gpio", {}).get("pwr"))
 
 
@@ -47,4 +52,5 @@ class NanoKVMHDDSensor(NanoKVMEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
+        """Return HDD activity state."""
         return bool(self.coordinator.data.get("gpio", {}).get("hdd"))
