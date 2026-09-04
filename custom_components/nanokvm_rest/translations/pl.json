@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Połącz z NanoKVM",
+        "description": "Połączenie lokalne z NanoKVM przez REST API.",
+        "data": {
+          "base_url": "Adres NanoKVM",
+          "username": "Nazwa użytkownika",
+          "password": "Hasło",
+          "verify_ssl": "Weryfikuj certyfikat TLS"
+        },
+        "data_description": {
+          "base_url": "Np. 192.168.1.50, http://nanokvm.local lub https://nanokvm.local"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie można połączyć się z NanoKVM.",
+      "invalid_auth": "Nieprawidłowy login lub hasło.",
+      "invalid_url": "Nieprawidłowy adres NanoKVM."
+    },
+    "abort": {
+      "already_configured": "To urządzenie NanoKVM jest już skonfigurowane."
+    }
+  }
+}
