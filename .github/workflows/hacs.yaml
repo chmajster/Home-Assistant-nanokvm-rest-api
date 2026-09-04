@@ -22,6 +22,7 @@ jobs:
           INPUT_CATEGORY: integration
           INPUT_IGNORE: brands description topics
           INPUT_COMMENT: "false"
+          REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
           docker run --rm \
@@ -30,6 +31,7 @@ jobs:
             -e INPUT_CATEGORY \
             -e INPUT_IGNORE \
             -e INPUT_COMMENT \
+            -e REPOSITORY_REF \
             ghcr.io/hacs/action:main 2>&1 | tee hacs.log
       - name: Upload HACS validation log
         if: always()
