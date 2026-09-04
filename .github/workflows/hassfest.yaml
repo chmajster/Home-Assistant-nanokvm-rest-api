@@ -1,0 +1,29 @@
+name: Hassfest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Hassfest
+        shell: bash
+        run: |
+          set -o pipefail
+          docker run --rm -v "${{ github.workspace }}:/github/workspace" ghcr.io/home-assistant/hassfest 2>&1 | tee hassfest.log
+      - name: Upload Hassfest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hassfest-log
+          path: hassfest.log
+          if-no-files-found: ignore
+          retention-days: 1
