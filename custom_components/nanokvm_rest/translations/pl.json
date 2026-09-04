@@ -13,6 +13,24 @@
         "data_description": {
           "base_url": "Np. 192.168.1.50, http://nanokvm.local lub https://nanokvm.local"
         }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne uwierzytelnienie NanoKVM",
+        "description": "Uwierzytelnienie nie powiodło się. Podaj prawidłowe dane logowania NanoKVM.",
+        "data": {
+          "username": "Nazwa użytkownika",
+          "password": "Hasło"
+        }
+      },
+      "reconfigure": {
+        "title": "Zmień konfigurację NanoKVM",
+        "description": "Zmień ustawienia połączenia. Pozostaw hasło puste, aby zachować obecne hasło.",
+        "data": {
+          "base_url": "Adres NanoKVM",
+          "username": "Nazwa użytkownika",
+          "password": "Nowe hasło (opcjonalne)",
+          "verify_ssl": "Weryfikuj certyfikat TLS"
+        }
       }
     },
     "error": {
@@ -21,7 +39,25 @@
       "invalid_url": "Nieprawidłowy adres NanoKVM."
     },
     "abort": {
-      "already_configured": "To urządzenie NanoKVM jest już skonfigurowane."
+      "already_configured": "To urządzenie NanoKVM jest już skonfigurowane.",
+      "reauth_successful": "Dane logowania NanoKVM zostały zaktualizowane.",
+      "reconfigure_successful": "Konfiguracja NanoKVM została zaktualizowana.",
+      "wrong_device": "Podane ustawienia wskazują na inne urządzenie NanoKVM."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje NanoKVM",
+        "data": {
+          "scan_interval": "Interwał odpytywania (sekundy)",
+          "force_off_ms": "Czas przytrzymania wymuszonego wyłączenia (ms)"
+        },
+        "data_description": {
+          "scan_interval": "Jak często Home Assistant odświeża stan NanoKVM (30–3600 sekund).",
+          "force_off_ms": "Jak długo przycisk zasilania jest przytrzymywany przy wymuszonym wyłączeniu (1000–10000 ms)."
+        }
+      }
     }
   }
 }
