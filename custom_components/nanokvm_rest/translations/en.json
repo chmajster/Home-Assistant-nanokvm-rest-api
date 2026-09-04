@@ -13,6 +13,24 @@
         "data_description": {
           "base_url": "For example 192.168.1.50, http://nanokvm.local, or https://nanokvm.local"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate NanoKVM",
+        "description": "Authentication failed. Enter valid NanoKVM credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure NanoKVM",
+        "description": "Change connection settings. Leave password empty to keep the current password.",
+        "data": {
+          "base_url": "NanoKVM address",
+          "username": "Username",
+          "password": "New password (optional)",
+          "verify_ssl": "Verify TLS certificate"
+        }
       }
     },
     "error": {
@@ -21,7 +39,25 @@
       "invalid_url": "Invalid NanoKVM address."
     },
     "abort": {
-      "already_configured": "This NanoKVM device is already configured."
+      "already_configured": "This NanoKVM device is already configured.",
+      "reauth_successful": "NanoKVM credentials were updated.",
+      "reconfigure_successful": "NanoKVM configuration was updated.",
+      "wrong_device": "The supplied settings point to a different NanoKVM device."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NanoKVM options",
+        "data": {
+          "scan_interval": "Polling interval (seconds)",
+          "force_off_ms": "Force-off hold duration (ms)"
+        },
+        "data_description": {
+          "scan_interval": "How often Home Assistant refreshes NanoKVM state (30–3600 seconds).",
+          "force_off_ms": "How long the power button is held for Force off (1000–10000 ms)."
+        }
+      }
     }
   }
 }
