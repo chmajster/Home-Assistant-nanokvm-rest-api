@@ -7,15 +7,29 @@ import base64
 import hashlib
 import json
 import os
+import re
 from http.cookies import SimpleCookie
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
 
-from .const import API_TIMEOUT, COOKIE_NAME, SECRET_KEY
+from .const import (
+    API_TIMEOUT,
+    APPLICATION_UPDATE_TIMEOUT,
+    COOKIE_NAME,
+    MAX_MEMORY_LIMIT_MB,
+    MAX_OLED_SLEEP_SECONDS,
+    MAX_SWAP_SIZE_MB,
+    MIN_MEMORY_LIMIT_MB,
+    MIN_OLED_SLEEP_SECONDS,
+    MIN_SWAP_SIZE_MB,
+    SECRET_KEY,
+)
+
+_MAC_RE = re.compile(r"^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 
 
 class NanoKVMError(Exception):
@@ -144,9 +158,25 @@ class NanoKVMClient:
         """Return NanoKVM hostname."""
         return await self._request("GET", "/api/vm/hostname")
 
+    async def async_set_hostname(self, hostname: str) -> None:
+        """Set the NanoKVM hostname."""
+        hostname = hostname.strip()
+        if not hostname or len(hostname) > 63:
+            raise ValueError("hostname must contain 1 to 63 characters")
+        await self._request(
+            "POST", "/api/vm/hostname", json_data={"hostname": hostname}
+        )
+
     async def async_get_web_title(self) -> dict[str, Any]:
         """Return NanoKVM web interface title."""
         return await self._request("GET", "/api/vm/web-title")
+
+    async def async_set_web_title(self, title: str) -> None:
+        """Set the NanoKVM web interface title."""
+        title = title.strip()
+        if not title or len(title) > 128:
+            raise ValueError("title must contain 1 to 128 characters")
+        await self._request("POST", "/api/vm/web-title", json_data={"title": title})
 
     async def async_get_hdmi(self) -> dict[str, Any]:
         """Return HDMI state for PCIe NanoKVM hardware."""
@@ -202,8 +232,155 @@ class NanoKVMClient:
         )
 
     async def async_get_swap(self) -> dict[str, Any]:
-        """Return configured swap file size."""
+        """Return configured swap file size in MB."""
         return await self._request("GET", "/api/vm/swap")
+
+    async def async_set_swap(self, size_mb: int) -> None:
+        """Set or disable the NanoKVM swap file."""
+        if not MIN_SWAP_SIZE_MB <= size_mb <= MAX_SWAP_SIZE_MB:
+            raise ValueError(
+                f"swap size must be between {MIN_SWAP_SIZE_MB} and "
+                f"{MAX_SWAP_SIZE_MB} MB"
+            )
+        await self._request(
+            "POST", "/api/vm/swap", json_data={"size": int(size_mb)}
+        )
+
+    async def async_get_memory_limit(self) -> dict[str, Any]:
+        """Return the NanoKVM Go runtime memory limit."""
+        return await self._request("GET", "/api/vm/memory/limit")
+
+    async def async_set_memory_limit(self, enabled: bool, limit_mb: int) -> None:
+        """Enable, disable or change the NanoKVM memory limit."""
+        if enabled and not MIN_MEMORY_LIMIT_MB <= limit_mb <= MAX_MEMORY_LIMIT_MB:
+            raise ValueError(
+                f"memory limit must be between {MIN_MEMORY_LIMIT_MB} and "
+                f"{MAX_MEMORY_LIMIT_MB} MB"
+            )
+        await self._request(
+            "POST",
+            "/api/vm/memory/limit",
+            json_data={"enabled": enabled, "limit": int(limit_mb if enabled else 0)},
+        )
+
+    async def async_get_oled(self) -> dict[str, Any]:
+        """Return OLED availability and sleep timeout."""
+        return await self._request("GET", "/api/vm/oled")
+
+    async def async_set_oled_sleep(self, seconds: int) -> None:
+        """Set OLED sleep timeout in seconds."""
+        if not MIN_OLED_SLEEP_SECONDS <= seconds <= MAX_OLED_SLEEP_SECONDS:
+            raise ValueError(
+                f"OLED sleep must be between {MIN_OLED_SLEEP_SECONDS} and "
+                f"{MAX_OLED_SLEEP_SECONDS} seconds"
+            )
+        await self._request("POST", "/api/vm/oled", json_data={"sleep": int(seconds)})
+
+    async def async_get_virtual_devices(self) -> dict[str, Any]:
+        """Return NanoKVM virtual USB device states."""
+        return await self._request("GET", "/api/vm/device/virtual")
+
+    async def async_set_virtual_device(self, device: str, enabled: bool) -> None:
+        """Set a toggle-only NanoKVM virtual USB device idempotently."""
+        if device not in {"network", "disk"}:
+            raise ValueError("device must be 'network' or 'disk'")
+        current = await self.async_get_virtual_devices()
+        if bool(current.get(device)) == enabled:
+            return
+        await self._request(
+            "POST", "/api/vm/device/virtual", json_data={"device": device}
+        )
+
+    async def async_get_application_version(self) -> dict[str, Any]:
+        """Return installed and latest NanoKVM application versions."""
+        return await self._request("GET", "/api/application/version", timeout=20)
+
+    async def async_get_preview_updates(self) -> dict[str, Any]:
+        """Return whether NanoKVM preview updates are enabled."""
+        return await self._request("GET", "/api/application/preview")
+
+    async def async_set_preview_updates(self, enabled: bool) -> None:
+        """Enable or disable NanoKVM preview updates."""
+        await self._request(
+            "POST", "/api/application/preview", json_data={"enable": enabled}
+        )
+
+    async def async_get_update_server(self) -> dict[str, Any]:
+        """Return custom NanoKVM update-server configuration."""
+        return await self._request("GET", "/api/application/update-server")
+
+    async def async_set_update_server(self, enabled: bool, url: str) -> None:
+        """Configure NanoKVM's custom application update server."""
+        url = url.strip()
+        if url:
+            if len(url) > 2048:
+                raise ValueError("update server URL must not exceed 2048 characters")
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("update server URL must use http or https")
+            if parsed.username or parsed.password:
+                raise ValueError("credentials are not allowed in the update server URL")
+            if parsed.query or parsed.fragment:
+                raise ValueError("update server URL must not contain query or fragment")
+        if enabled and not url:
+            raise ValueError("update server URL is required when enabling it")
+        await self._request(
+            "POST",
+            "/api/application/update-server",
+            json_data={"enabled": enabled, "url": url},
+        )
+
+    async def async_update_application(self) -> None:
+        """Update the NanoKVM application to the latest available version."""
+        await self._request(
+            "POST",
+            "/api/application/update",
+            timeout=APPLICATION_UPDATE_TIMEOUT,
+        )
+
+    async def async_wake_on_lan(self, mac: str) -> None:
+        """Send Wake-on-LAN through NanoKVM."""
+        mac = mac.strip()
+        if not _MAC_RE.fullmatch(mac):
+            raise ValueError("invalid MAC address")
+        await self._request("POST", "/api/network/wol", json_data={"mac": mac})
+
+    async def async_get_images(self) -> dict[str, Any]:
+        """Return virtual-media image list."""
+        return await self._request("GET", "/api/storage/image")
+
+    async def async_get_mounted_image(self) -> dict[str, Any]:
+        """Return the currently mounted virtual-media image."""
+        return await self._request("GET", "/api/storage/image/mounted")
+
+    async def async_mount_image(self, file_name: str, cdrom: bool = True) -> None:
+        """Mount a virtual-media image."""
+        file_name = file_name.strip()
+        if not file_name:
+            raise ValueError("image file name must not be empty")
+        await self._request(
+            "POST",
+            "/api/storage/image/mount",
+            json_data={"file": file_name, "cdrom": bool(cdrom)},
+        )
+
+    async def async_unmount_image(self) -> None:
+        """Unmount the current virtual-media image."""
+        await self._request(
+            "POST",
+            "/api/storage/image/mount",
+            json_data={"file": "", "cdrom": True},
+        )
+
+    async def async_paste_text(self, content: str, language: str = "en") -> None:
+        """Paste text to the remote host through NanoKVM HID."""
+        if not content:
+            raise ValueError("content must not be empty")
+        await self._request(
+            "POST",
+            "/api/hid/paste",
+            json_data={"content": content, "langue": language or "en"},
+        )
 
     async def async_reboot(self) -> None:
         """Reboot the NanoKVM device itself."""
@@ -228,6 +405,7 @@ class NanoKVMClient:
         *,
         json_data: dict[str, Any] | None = None,
         retry_auth: bool = True,
+        timeout: int = API_TIMEOUT,
     ) -> dict[str, Any]:
         if not self._logged_in:
             await self.async_login()
@@ -242,7 +420,7 @@ class NanoKVMClient:
                 f"{self._base_url}{path}",
                 json=json_data,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=API_TIMEOUT),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as response:
                 if response.status == 401:
                     if retry_auth:
@@ -250,7 +428,11 @@ class NanoKVMClient:
                         self._token = None
                         await self.async_login()
                         return await self._request(
-                            method, path, json_data=json_data, retry_auth=False
+                            method,
+                            path,
+                            json_data=json_data,
+                            retry_auth=False,
+                            timeout=timeout,
                         )
                     raise NanoKVMAuthError("NanoKVM session is unauthorized")
 

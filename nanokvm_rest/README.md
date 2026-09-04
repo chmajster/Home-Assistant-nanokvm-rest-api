@@ -4,6 +4,8 @@ This Home Assistant app installs the bundled `NanoKVM REST` custom integration i
 
 The app is an installer, not a background NanoKVM service. It uses `startup: once` and stops after copying the integration.
 
+Version 0.4.0 bundles application updates, hostname/web-title controls, OLED/swap/memory configuration, virtual USB device switches and Home Assistant device actions/triggers.
+
 ## Installation
 
 1. Add `https://github.com/chmajster/homeassistant-nanokvm-rest-api` as a custom repository in the Home Assistant app/add-on store.
@@ -19,4 +21,4 @@ After updating the NanoKVM REST app, start it once again so the bundled integrat
 
 ## Important
 
-The repository must be reachable by the Home Assistant Supervisor. A private GitHub repository cannot be cloned by a normal custom-repository installation unless the Supervisor has a supported authenticated Git source.
+The repository must be reachable by Home Assistant Supervisor. A private GitHub repository cannot be cloned by a normal custom-repository installation unless Supervisor has a supported authenticated Git source.

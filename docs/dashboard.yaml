@@ -1,0 +1,60 @@
+# Example NanoKVM Lovelace dashboard using only built-in Home Assistant cards.
+# Adjust entity IDs to match the entity registry in your Home Assistant instance.
+type: vertical-stack
+cards:
+  - type: entities
+    title: NanoKVM
+    show_header_toggle: false
+    entities:
+      - entity: binary_sensor.nanokvm_power
+        name: Host power
+      - entity: binary_sensor.nanokvm_hdmi_signal
+        name: HDMI signal
+      - entity: sensor.nanokvm_application
+        name: Application version
+      - entity: update.nanokvm_application
+        name: NanoKVM update
+      - entity: switch.nanokvm_preview_updates
+        name: Preview updates
+      - entity: switch.nanokvm_custom_update_server
+        name: Custom update server
+      - entity: text.nanokvm_update_server_url
+        name: Update server URL
+      - entity: text.nanokvm_hostname
+        name: Hostname
+      - entity: text.nanokvm_web_title
+        name: Web title
+      - entity: switch.nanokvm_hdmi_capture
+        name: HDMI capture
+      - entity: switch.nanokvm_ssh
+        name: SSH
+      - entity: switch.nanokvm_virtual_network
+        name: Virtual USB network
+      - entity: switch.nanokvm_virtual_disk
+        name: Virtual USB disk
+      - entity: switch.nanokvm_memory_limit
+        name: Memory limit enabled
+      - entity: number.nanokvm_memory_limit
+        name: Memory limit
+      - entity: number.nanokvm_swap_size
+        name: Swap size
+      - entity: number.nanokvm_oled_sleep
+        name: OLED sleep
+
+  - type: horizontal-stack
+    cards:
+      - type: button
+        entity: button.nanokvm_power
+        name: Power
+        icon: mdi:power
+        show_state: false
+      - type: button
+        entity: button.nanokvm_reset
+        name: Reset
+        icon: mdi:restart
+        show_state: false
+      - type: button
+        entity: button.nanokvm_force_off
+        name: Force off
+        icon: mdi:power-plug-off
+        show_state: false

@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DEFAULT_MEMORY_LIMIT_MB, MIN_MEMORY_LIMIT_MB
 from .coordinator import NanoKVMCoordinator
 from .entity import NanoKVMEntity
 
@@ -33,6 +34,26 @@ async def async_setup_entry(
         mouse_jiggler = data.get("mouse_jiggler")
         if isinstance(mouse_jiggler, dict) and mouse_jiggler.get("mode"):
             entities.append(NanoKVMMouseJigglerSwitch(coordinator))
+        if isinstance(data.get("memory_limit"), dict):
+            entities.append(NanoKVMMemoryLimitSwitch(coordinator))
+        if isinstance(data.get("preview_updates"), dict):
+            entities.append(NanoKVMPreviewUpdatesSwitch(coordinator))
+        if isinstance(data.get("update_server"), dict):
+            entities.append(NanoKVMCustomUpdateServerSwitch(coordinator))
+        virtual_devices = data.get("virtual_devices")
+        if isinstance(virtual_devices, dict):
+            if "network" in virtual_devices:
+                entities.append(
+                    NanoKVMVirtualDeviceSwitch(
+                        coordinator, "network", "Virtual network", "mdi:ethernet"
+                    )
+                )
+            if "disk" in virtual_devices:
+                entities.append(
+                    NanoKVMVirtualDeviceSwitch(
+                        coordinator, "disk", "Virtual disk", "mdi:harddisk"
+                    )
+                )
 
     async_add_entities(entities)
 
@@ -149,4 +170,137 @@ class NanoKVMMouseJigglerSwitch(NanoKVMEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: object) -> None:
         """Disable the mouse jiggler."""
+        await self._async_set_state(False)
+
+
+class NanoKVMMemoryLimitSwitch(NanoKVMEntity, SwitchEntity):
+    """Enable or disable the NanoKVM server memory limit."""
+
+    _attr_name = "Memory limit"
+    _attr_icon = "mdi:memory"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_memory_limit_enabled"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the memory limit is enabled."""
+        return bool(
+            (self.coordinator.data.get("memory_limit") or {}).get("enabled")
+        )
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        """Enable the memory limit using the existing or upstream default value."""
+        data = self.coordinator.data.get("memory_limit") or {}
+        limit = data.get("limit")
+        if not isinstance(limit, (int, float)) or limit < MIN_MEMORY_LIMIT_MB:
+            limit = DEFAULT_MEMORY_LIMIT_MB
+        await self.coordinator.client.async_set_memory_limit(True, int(limit))
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        """Disable the memory limit."""
+        await self.coordinator.client.async_set_memory_limit(False, 0)
+        await self.coordinator.async_request_refresh()
+
+
+class NanoKVMVirtualDeviceSwitch(NanoKVMEntity, SwitchEntity):
+    """Toggle one NanoKVM virtual USB device."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self,
+        coordinator: NanoKVMCoordinator,
+        device: str,
+        name: str,
+        icon: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_name = name
+        self._attr_icon = icon
+        self._attr_unique_id = f"{self._device_key}_virtual_{device}"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether this virtual USB device is mounted."""
+        return bool(
+            (self.coordinator.data.get("virtual_devices") or {}).get(self._device)
+        )
+
+    async def _async_set_state(self, enabled: bool) -> None:
+        await self.coordinator.client.async_set_virtual_device(self._device, enabled)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        """Enable the virtual device."""
+        await self._async_set_state(True)
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        """Disable the virtual device."""
+        await self._async_set_state(False)
+
+
+class NanoKVMPreviewUpdatesSwitch(NanoKVMEntity, SwitchEntity):
+    """Select NanoKVM preview updates instead of the stable channel."""
+
+    _attr_name = "Preview updates"
+    _attr_icon = "mdi:test-tube"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_preview_updates"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether preview updates are enabled."""
+        return bool((self.coordinator.data.get("preview_updates") or {}).get("enabled"))
+
+    async def _async_set_state(self, enabled: bool) -> None:
+        await self.coordinator.client.async_set_preview_updates(enabled)
+        self.coordinator.invalidate_application_version()
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        """Enable preview updates."""
+        await self._async_set_state(True)
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        """Disable preview updates."""
+        await self._async_set_state(False)
+
+
+class NanoKVMCustomUpdateServerSwitch(NanoKVMEntity, SwitchEntity):
+    """Enable or disable NanoKVM's custom update server."""
+
+    _attr_name = "Custom update server"
+    _attr_icon = "mdi:server-network"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_custom_update_server"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the custom update server is active."""
+        return bool((self.coordinator.data.get("update_server") or {}).get("enabled"))
+
+    async def _async_set_state(self, enabled: bool) -> None:
+        data = self.coordinator.data.get("update_server") or {}
+        url = str(data.get("url") or "")
+        await self.coordinator.client.async_set_update_server(enabled, url)
+        self.coordinator.invalidate_application_version()
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        """Enable the configured custom update server."""
+        await self._async_set_state(True)
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        """Disable the custom update server."""
         await self._async_set_state(False)

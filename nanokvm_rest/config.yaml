@@ -2,7 +2,7 @@ name: "NanoKVM REST"
 slug: "nanokvm_rest"
 description: >-
   Installs the NanoKVM REST custom integration into Home Assistant.
-version: "0.3.0"
+version: "0.4.0"
 url: "https://github.com/chmajster/homeassistant-nanokvm-rest-api"
 arch:
   - amd64
