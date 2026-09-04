@@ -59,5 +59,30 @@
         }
       }
     }
+  },
+  "device_automation": {
+    "action_type": {
+      "power_on": "Power on the attached computer",
+      "power_press": "Press the attached computer power button",
+      "force_off": "Force off the attached computer",
+      "reset": "Reset the attached computer",
+      "reboot_nanokvm": "Reboot NanoKVM",
+      "wake_on_lan": "Send Wake-on-LAN",
+      "mount_iso": "Mount virtual-media image",
+      "unmount_iso": "Unmount virtual-media image",
+      "paste_text": "Paste text through NanoKVM HID"
+    },
+    "trigger_type": {
+      "power_on": "Attached computer powered on",
+      "power_off": "Attached computer powered off",
+      "hdmi_signal_on": "HDMI signal appeared",
+      "hdmi_signal_off": "HDMI signal disappeared",
+      "became_unavailable": "NanoKVM became unavailable"
+    }
+  },
+  "exceptions": {
+    "config_invalid": {
+      "message": "NanoKVM device {device_id} does not have a loaded integration entry."
+    }
   }
 }

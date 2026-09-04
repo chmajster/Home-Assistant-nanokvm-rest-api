@@ -59,5 +59,30 @@
         }
       }
     }
+  },
+  "device_automation": {
+    "action_type": {
+      "power_on": "Włącz podłączony komputer",
+      "power_press": "Naciśnij przycisk zasilania podłączonego komputera",
+      "force_off": "Wymuś wyłączenie podłączonego komputera",
+      "reset": "Zresetuj podłączony komputer",
+      "reboot_nanokvm": "Uruchom ponownie NanoKVM",
+      "wake_on_lan": "Wyślij Wake-on-LAN",
+      "mount_iso": "Zamontuj obraz nośnika wirtualnego",
+      "unmount_iso": "Odmontuj obraz nośnika wirtualnego",
+      "paste_text": "Wklej tekst przez HID NanoKVM"
+    },
+    "trigger_type": {
+      "power_on": "Podłączony komputer został włączony",
+      "power_off": "Podłączony komputer został wyłączony",
+      "hdmi_signal_on": "Pojawił się sygnał HDMI",
+      "hdmi_signal_off": "Zniknął sygnał HDMI",
+      "became_unavailable": "NanoKVM stał się niedostępny"
+    }
+  },
+  "exceptions": {
+    "config_invalid": {
+      "message": "Urządzenie NanoKVM {device_id} nie ma załadowanego wpisu integracji."
+    }
   }
 }

@@ -12,6 +12,12 @@ This app installs the NanoKVM REST custom integration into Home Assistant.
 
 The app stops after installation by design.
 
+## Integration features in 0.4.0
+
+The bundled integration includes NanoKVM application updates, writable hostname/web title, OLED/swap/memory controls, virtual USB device switches, device actions and device triggers in addition to the existing power/HDMI/SSH/mDNS monitoring and controls.
+
+Administrator-only NanoKVM endpoints are exposed only when the configured account reports the `admin` role.
+
 ## Updates
 
 When a new app version is installed, start the app once to copy the updated integration files, then restart Home Assistant.
