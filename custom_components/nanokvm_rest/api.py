@@ -30,8 +30,23 @@ class NanoKVMAuthError(NanoKVMError):
     """Authentication failed."""
 
 
+class NanoKVMPermissionError(NanoKVMError):
+    """The authenticated NanoKVM account lacks permission for an action."""
+
+
 class NanoKVMAPIError(NanoKVMError):
     """NanoKVM returned an unsuccessful API response."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        code: int | str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
 
 
 def _evp_bytes_to_key(passphrase: bytes, salt: bytes) -> tuple[bytes, bytes]:
@@ -109,6 +124,10 @@ class NanoKVMClient:
             except (aiohttp.ClientError, TimeoutError) as err:
                 raise NanoKVMConnectionError(str(err)) from err
 
+    async def async_get_account(self) -> dict[str, Any]:
+        """Return information about the authenticated NanoKVM account."""
+        return await self._request("GET", "/api/auth/account")
+
     async def async_get_info(self) -> dict[str, Any]:
         """Return NanoKVM device information."""
         return await self._request("GET", "/api/vm/info")
@@ -124,6 +143,71 @@ class NanoKVMClient:
     async def async_get_hostname(self) -> dict[str, Any]:
         """Return NanoKVM hostname."""
         return await self._request("GET", "/api/vm/hostname")
+
+    async def async_get_web_title(self) -> dict[str, Any]:
+        """Return NanoKVM web interface title."""
+        return await self._request("GET", "/api/vm/web-title")
+
+    async def async_get_hdmi(self) -> dict[str, Any]:
+        """Return HDMI state for PCIe NanoKVM hardware."""
+        return await self._request("GET", "/api/vm/hdmi")
+
+    async def async_set_hdmi(self, enabled: bool) -> None:
+        """Enable or disable HDMI capture."""
+        path = "/api/vm/hdmi/enable" if enabled else "/api/vm/hdmi/disable"
+        await self._request("POST", path)
+
+    async def async_reset_hdmi(self) -> None:
+        """Reset the NanoKVM HDMI subsystem."""
+        await self._request("POST", "/api/vm/hdmi/reset")
+
+    async def async_set_hdmi_idle_timeout(self, minutes: int) -> None:
+        """Set HDMI idle timeout in minutes."""
+        if not 0 <= minutes <= 10080:
+            raise ValueError("minutes must be between 0 and 10080")
+        await self._request(
+            "POST",
+            "/api/vm/hdmi/timeout",
+            json_data={"minutes": minutes},
+        )
+
+    async def async_get_ssh(self) -> dict[str, Any]:
+        """Return SSH service state."""
+        return await self._request("GET", "/api/vm/ssh")
+
+    async def async_set_ssh(self, enabled: bool) -> None:
+        """Enable or disable SSH on NanoKVM."""
+        path = "/api/vm/ssh/enable" if enabled else "/api/vm/ssh/disable"
+        await self._request("POST", path)
+
+    async def async_get_mdns(self) -> dict[str, Any]:
+        """Return mDNS service state."""
+        return await self._request("GET", "/api/vm/mdns")
+
+    async def async_set_mdns(self, enabled: bool) -> None:
+        """Enable or disable mDNS on NanoKVM."""
+        path = "/api/vm/mdns/enable" if enabled else "/api/vm/mdns/disable"
+        await self._request("POST", path)
+
+    async def async_get_mouse_jiggler(self) -> dict[str, Any]:
+        """Return mouse jiggler state."""
+        return await self._request("GET", "/api/vm/mouse-jiggler")
+
+    async def async_set_mouse_jiggler(self, enabled: bool, mode: str) -> None:
+        """Enable or disable the mouse jiggler while preserving its mode."""
+        await self._request(
+            "POST",
+            "/api/vm/mouse-jiggler",
+            json_data={"enabled": enabled, "mode": mode},
+        )
+
+    async def async_get_swap(self) -> dict[str, Any]:
+        """Return configured swap file size."""
+        return await self._request("GET", "/api/vm/swap")
+
+    async def async_reboot(self) -> None:
+        """Reboot the NanoKVM device itself."""
+        await self._request("POST", "/api/vm/system/reboot")
 
     async def async_press_button(self, button_type: str, duration_ms: int) -> None:
         """Press the target power or reset button through NanoKVM GPIO."""
@@ -160,7 +244,7 @@ class NanoKVMClient:
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=API_TIMEOUT),
             ) as response:
-                if response.status in (401, 403):
+                if response.status == 401:
                     if retry_auth:
                         self._logged_in = False
                         self._token = None
@@ -170,11 +254,13 @@ class NanoKVMClient:
                         )
                     raise NanoKVMAuthError("NanoKVM session is unauthorized")
 
-                data = await self._decode_response(response)
-                if response.status >= 400:
-                    message = str(data.get("msg") or f"HTTP {response.status}")
-                    raise NanoKVMAPIError(message)
+                if response.status == 403:
+                    await response.read()
+                    raise NanoKVMPermissionError(
+                        f"NanoKVM account is not allowed to access {path}"
+                    )
 
+                data = await self._decode_response(response)
                 self._ensure_success(data)
                 result = data.get("data")
                 return result if isinstance(result, dict) else {}
@@ -190,14 +276,30 @@ class NanoKVMClient:
             raise NanoKVMConnectionError(
                 f"NanoKVM HTTP {response.status}: {text[:200]}"
             )
+
         try:
             data = json.loads(text)
         except json.JSONDecodeError as err:
+            if response.status >= 400:
+                raise NanoKVMAPIError(
+                    f"NanoKVM HTTP {response.status}", status=response.status
+                ) from err
             raise NanoKVMAPIError(
-                f"Invalid NanoKVM response (HTTP {response.status})"
+                f"Invalid NanoKVM response (HTTP {response.status})",
+                status=response.status,
             ) from err
+
+        if response.status >= 400:
+            if isinstance(data, dict):
+                message = str(data.get("msg") or f"HTTP {response.status}")
+            else:
+                message = str(data)
+            raise NanoKVMAPIError(message, status=response.status)
+
         if not isinstance(data, dict):
-            raise NanoKVMAPIError("Unexpected NanoKVM response format")
+            raise NanoKVMAPIError(
+                "Unexpected NanoKVM response format", status=response.status
+            )
         return data
 
     @staticmethod
@@ -208,7 +310,7 @@ class NanoKVMClient:
         message = str(data.get("msg") or "NanoKVM API error")
         if auth or code in {-2, -3}:
             raise NanoKVMAuthError(message)
-        raise NanoKVMAPIError(f"{message} (code={code})")
+        raise NanoKVMAPIError(f"{message} (code={code})", code=code)
 
     @staticmethod
     def _extract_token(response: aiohttp.ClientResponse) -> str | None:
