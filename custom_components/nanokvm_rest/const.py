@@ -3,7 +3,13 @@
 from homeassistant.const import Platform
 
 DOMAIN = "nanokvm_rest"
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SENSOR]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 CONF_BASE_URL = "base_url"
 CONF_VERIFY_SSL = "verify_ssl"
@@ -19,6 +25,9 @@ DEFAULT_POWER_PRESS_MS = 800
 DEFAULT_FORCE_OFF_MS = 5000
 MIN_FORCE_OFF_MS = 1000
 MAX_FORCE_OFF_MS = 10000
+
+MIN_HDMI_IDLE_TIMEOUT = 0
+MAX_HDMI_IDLE_TIMEOUT = 10080
 
 COOKIE_NAME = "nano-kvm-token"
 API_TIMEOUT = 10
