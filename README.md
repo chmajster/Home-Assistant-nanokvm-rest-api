@@ -28,6 +28,22 @@ Custom Home Assistant integration for Sipeed NanoKVM using the local NanoKVM RES
 - NanoKVM reachable from the Home Assistant instance.
 - NanoKVM credentials when authentication is enabled.
 
+## Installation from the Home Assistant app/add-on store
+
+This repository now also follows the Home Assistant custom app repository layout, like `Home-Assistant-Addon-Download-Manager`.
+
+1. Open the Home Assistant app/add-on store.
+2. Open **Repositories**.
+3. Add `https://github.com/chmajster/homeassistant-nanokvm-rest-api`.
+4. Install **NanoKVM REST**.
+5. Start the app once. It copies the bundled integration to `/config/custom_components/nanokvm_rest` and then stops by design.
+6. Restart Home Assistant.
+7. Go to **Settings → Devices & services → Add integration** and select **NanoKVM REST**.
+
+After an app update, start the app once again and restart Home Assistant so the updated integration files are loaded.
+
+The repository must be reachable by Home Assistant Supervisor. A normal custom-repository install cannot clone a private GitHub repository without supported Git authentication, so this repository must be public or otherwise anonymously reachable for the URL above to work directly.
+
 ## Installation with HACS
 
 1. Open HACS in Home Assistant.
