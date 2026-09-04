@@ -11,7 +11,7 @@
           "verify_ssl": "Verify TLS certificate"
         },
         "data_description": {
-          "base_url": "For example 192.168.1.50, http://nanokvm.local, or https://nanokvm.local"
+          "base_url": "For example 192.168.1.50 or nanokvm.local. A full HTTP or HTTPS address is also accepted."
         }
       },
       "reauth_confirm": {
