@@ -25,7 +25,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the NanoKVM application update entity."""
     coordinator: NanoKVMCoordinator = entry.runtime_data
-    if coordinator.data.get("capabilities", {}).get("admin"):
+    if (
+        coordinator.data.get("capabilities", {}).get("admin")
+        and (
+            coordinator.data.get("application_version") is not None
+            or coordinator.data.get("preview_updates") is not None
+        )
+    ):
         async_add_entities([NanoKVMApplicationUpdate(coordinator)])
 
 
