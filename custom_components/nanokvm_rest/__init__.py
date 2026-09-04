@@ -8,7 +8,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NanoKVMClient
-from .const import CONF_BASE_URL, CONF_VERIFY_SSL, PLATFORMS
+from .const import (
+    CONF_BASE_URL,
+    CONF_SCAN_INTERVAL,
+    CONF_VERIFY_SSL,
+    DEFAULT_SCAN_INTERVAL,
+    PLATFORMS,
+)
 from .coordinator import NanoKVMCoordinator
 
 
@@ -26,7 +32,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NanoKVMConfigEntry) -> b
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
     )
-    coordinator = NanoKVMCoordinator(hass, client)
+    scan_interval = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+    coordinator = NanoKVMCoordinator(hass, entry, client, scan_interval)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
