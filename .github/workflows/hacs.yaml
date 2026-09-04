@@ -14,7 +14,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hacs/action@main
+      - name: Run HACS validation
+        shell: bash
+        env:
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REPOSITORY: ${{ github.repository }}
+          INPUT_CATEGORY: integration
+          INPUT_IGNORE: brands description topics
+          INPUT_COMMENT: "false"
+        run: |
+          set -o pipefail
+          docker run --rm \
+            -e INPUT_GITHUB_TOKEN \
+            -e INPUT_REPOSITORY \
+            -e INPUT_CATEGORY \
+            -e INPUT_IGNORE \
+            -e INPUT_COMMENT \
+            ghcr.io/hacs/action:main 2>&1 | tee hacs.log
+      - name: Upload HACS validation log
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          category: integration
-          ignore: brands description topics
+          name: hacs-validation-log
+          path: hacs.log
+          if-no-files-found: ignore
+          retention-days: 1
