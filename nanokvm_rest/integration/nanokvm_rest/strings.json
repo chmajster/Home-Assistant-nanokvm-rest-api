@@ -50,10 +50,12 @@
       "init": {
         "title": "NanoKVM options",
         "data": {
+          "show_sidebar_panel": "Add Remote Server to the Home Assistant sidebar",
           "scan_interval": "Polling interval (seconds)",
           "force_off_ms": "Force-off hold duration (ms)"
         },
         "data_description": {
+          "show_sidebar_panel": "Show or hide the administrator-only Remote Server panel in the Home Assistant sidebar. With multiple NanoKVM entries, the panel stays visible while at least one entry has this option enabled.",
           "scan_interval": "How often Home Assistant refreshes NanoKVM state (30–3600 seconds).",
           "force_off_ms": "How long the power button is held for Force off (1000–10000 ms)."
         }
