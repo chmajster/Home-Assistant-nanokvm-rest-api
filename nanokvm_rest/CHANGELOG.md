@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1
+
+- Silences normal `s6-overlay` service start/stop lifecycle output for the one-shot Home Assistant installer by setting `S6_VERBOSITY=0`.
+- Prevents the harmless `s6rc-oneshot-runner is marked as essential, not stopping it` shutdown warning from making a successful installation look like a failure.
+- Adds an explicit `SUCCESS` message explaining that the installer stopping after copying the integration is expected behavior.
+- Keeps `startup: once` semantics; the add-on remains an installer rather than a permanently running service.
+- Aligns integration, bundled integration, add-on and container patch version at `0.10.1`.
+
 ## 0.10.0
 
 - Adds a fleet-wide **Operations Center** to the Remote Server sidepanel.
