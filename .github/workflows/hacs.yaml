@@ -54,9 +54,10 @@ jobs:
           print(f"HACS structure OK: {manifest['domain']} {manifest['version']}")
           PY
           python -m compileall -q custom_components/nanokvm_rest
-          for panel_js in custom_components/nanokvm_rest/www/remote-server*.js; do
-            node --check "$panel_js"
+          for file in custom_components/nanokvm_rest/www/remote-server*.js; do
+            node --check "$file"
           done
+          diff -qr custom_components/nanokvm_rest nanokvm_rest/integration/nanokvm_rest
 
       - name: Run official HACS validation for public repository
         if: ${{ github.event.repository.private == false }}
