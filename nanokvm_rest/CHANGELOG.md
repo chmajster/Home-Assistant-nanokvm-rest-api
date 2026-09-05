@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.0
+
+- Adds a dedicated **Update Center** with current/latest version, Stable/Preview channel, update availability and per-device runtime status.
+- Adds one-click online application updates from the Remote Server panel.
+- Adds **staged updates** for multiple NanoKVM devices: devices update sequentially and the batch stops if the previous device does not return online with the new version.
+- Adds staged-update cancel between devices and per-device queued/updating/waiting/success/error state.
+- Adds dedicated update history using the existing persistent Remote Server audit log.
+- Keeps offline update available directly from Update Center.
+- Rebuilds **Virtual Media** as an ISO/IMG library with search, sorting, mounted state, favorites, recent usage and locally-known size/date/source metadata.
+- Adds multi-select image deletion while protecting the currently mounted image.
+- Adds direct **ISO upload through Home Assistant** using NanoKVM's native `/api/download/file` endpoint and optional SHA-256 verification.
+- Adds **ISO download from URL** using NanoKVM's native background downloader with progress, cancel and optional SHA-256 verification.
+- Tracks uploaded/downloaded image metadata in Home Assistant `.storage`; pre-existing NanoKVM files keep unknown size/date because upstream only exposes their paths.
+- Adds **HID Toolbox** with HID reset, USB/HID reconnect, text paste, keyboard LED status and Normal/HID-only mode selection.
+- Warns that changing HID mode causes a NanoKVM reboot, matching upstream behavior.
+- Adds the responsive `remote-server-v4.js` frontend with dedicated Update Center, Virtual Media and HID Toolbox sections.
+- Aligns HACS/manual and Home Assistant app/add-on packages at version `0.8.0`.
+
 ## 0.7.0
 
 - Adds an all-device **NanoKVM dashboard** with online/offline, host power, HDMI, version and health information.
