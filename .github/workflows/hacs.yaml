@@ -55,7 +55,7 @@ jobs:
           PY
           diff -qr custom_components/nanokvm_rest nanokvm_rest/integration/nanokvm_rest
           python -m compileall -q custom_components/nanokvm_rest
-          for file in custom_components/nanokvm_rest/www/remote-server*.js; do
+          for file in custom_components/nanokvm_rest/www/*.js; do
             node --check "$file"
           done
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.0
+
+- Adds a native **Remote Console / Live KVM** view directly inside the Home Assistant Remote Server sidepanel.
+- Bridges NanoKVM's direct H.264 WebSocket stream through Home Assistant so the browser never needs NanoKVM credentials or its session cookie.
+- Decodes H.264 in a dedicated Web Worker using WebCodecs and OffscreenCanvas with NanoKVM frame acknowledgements/resync for low latency.
+- Adds Fit, 100%, 125%, 150% and 200% console scaling.
+- Adds fullscreen console mode and best-effort mobile landscape orientation lock.
+- Adds physical keyboard forwarding using standard USB HID reports.
+- Adds absolute mouse positioning, mouse buttons and wheel scrolling.
+- Adds mobile touch controls: tap for left click, long press for right click and two-finger vertical scrolling.
+- Adds touch-friendly Esc, F2, F8, F12, Enter, Delete and Ctrl+Alt+Delete controls.
+- Adds independent keyboard/mouse enable toggles and text paste through the existing NanoKVM HID paste API.
+- Displays keyboard LED state when NanoKVM reports NumLock, CapsLock and ScrollLock information.
+- Uses Home Assistant administrator-only, one-time console session tokens with a 30-second expiry and same-origin WebSocket transport.
+- Avoids HTTPS Home Assistant -> HTTP NanoKVM browser mixed-content restrictions by keeping NanoKVM WebSockets server-side.
+- Keeps the native NanoKVM UI as a fallback for browsers without WebCodecs/OffscreenCanvas support.
+- Adds `remote-console-worker.js`, `remote-console-controller.js`, `remote-server-v5.js`, `console.py`, `panel_v4.py` and Remote Console documentation.
+- Expands CI JavaScript syntax validation to every integration `www/*.js` file.
+- Aligns HACS/manual and Home Assistant app/add-on packages at version `0.9.0`.
+
 ## 0.8.0
 
 - Adds a dedicated **Update Center** with current/latest version, Stable/Preview channel, update availability and per-device runtime status.
