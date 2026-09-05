@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS, DEFAULT_POWER_PRESS_MS
 from .coordinator import NanoKVMCoordinator
 from .entity import NanoKVMEntity
+from .management import async_reset_hid
 
 
 async def async_setup_entry(
@@ -49,7 +50,12 @@ async def async_setup_entry(
     if capabilities.get("pcie") and coordinator.data.get("hdmi") is not None:
         entities.append(NanoKVMResetHDMIButton(coordinator))
     if capabilities.get("admin"):
-        entities.append(NanoKVMRebootButton(coordinator))
+        entities.extend(
+            [
+                NanoKVMResetHIDButton(coordinator),
+                NanoKVMRebootButton(coordinator),
+            ]
+        )
 
     async_add_entities(entities)
 
@@ -95,6 +101,23 @@ class NanoKVMResetHDMIButton(NanoKVMEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Reset HDMI and refresh state."""
         await self.coordinator.client.async_reset_hdmi()
+        await self.coordinator.async_request_refresh()
+
+
+class NanoKVMResetHIDButton(NanoKVMEntity, ButtonEntity):
+    """Reset the NanoKVM HID subsystem without rebooting the device."""
+
+    _attr_name = "Reset HID"
+    _attr_icon = "mdi:keyboard-off-outline"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NanoKVMCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._device_key}_reset_hid"
+
+    async def async_press(self) -> None:
+        """Reset HID and refresh state."""
+        await async_reset_hid(self.coordinator.client)
         await self.coordinator.async_request_refresh()
 
 
