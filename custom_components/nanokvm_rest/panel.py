@@ -195,12 +195,13 @@ async def websocket_device_action(
         elif action == "reset":
             await client.async_press_button("reset", DEFAULT_POWER_PRESS_MS)
         elif action == "force_off":
-            duration = int(
-                coordinator.config_entry.options.get(
-                    CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS
+            if bool((coordinator.data.get("gpio") or {}).get("pwr")):
+                duration = int(
+                    coordinator.config_entry.options.get(
+                        CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS
+                    )
                 )
-            )
-            await client.async_press_button("power", duration)
+                await client.async_press_button("power", duration)
         elif action == "reboot_nanokvm":
             if not admin:
                 raise ValueError("administrator account is required")
@@ -292,6 +293,9 @@ class NanoKVMOfflineUpdateView(HomeAssistantView):
                             status_code=413,
                         )
                     await hass.async_add_executor_job(target.write, chunk)
+
+            if written == 0:
+                return self.json({"error": "offline update package is empty"}, status_code=400)
 
             await async_offline_update(
                 coordinator.client,
