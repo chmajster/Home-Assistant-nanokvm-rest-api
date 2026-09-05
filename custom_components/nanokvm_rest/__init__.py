@@ -16,7 +16,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import NanoKVMCoordinator
-from .panel_v2 import async_setup_remote_panel
+from .panel_v3 import async_setup_remote_panel
 
 
 type NanoKVMConfigEntry = ConfigEntry[NanoKVMCoordinator]

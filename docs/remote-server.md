@@ -1,82 +1,76 @@
 # Remote Server sidepanel
 
-NanoKVM REST 0.7.0 registers an administrator-only Home Assistant sidepanel named **Remote Server** after the first NanoKVM config entry is loaded.
+NanoKVM REST 0.8.0 provides an administrator-only Home Assistant sidepanel named **Remote Server**.
 
 ## Dashboard
 
-The default view is an all-device dashboard designed for both desktop and mobile. It shows every configured NanoKVM with:
+The dashboard lists all configured NanoKVM devices and keeps the 0.7.x management features: health score, online/offline and host-power state, quick actions, favorites, groups, tags, search, recently used devices, Wake-on-LAN profiles and persistent event history.
 
-- availability and host-power state;
-- HDMI state when supported;
-- hardware and NanoKVM application version;
-- calculated Health Score;
-- favorite, group and tags;
-- quick actions for power-on, host reset, HID reset and opening the native UI.
+## Update Center
 
-The dashboard can be filtered by free-text search, group, tag and favorites. Search matches the config-entry title, NanoKVM hostname, address/URL, hardware, group and tags.
+Update Center shows every configured NanoKVM with:
 
-## Health Score
+- current application version,
+- latest version reported by NanoKVM,
+- Stable or Preview channel,
+- update availability,
+- queued/updating/waiting/success/error runtime state,
+- one-click online update,
+- offline update package upload,
+- update-related history from the persistent Remote Server event log.
 
-Health Score is calculated at runtime and is not persisted as a separate sensor. An unavailable KVM is Critical. A PCIe NanoKVM with a powered-on host but no HDMI signal lowers the score, as do missing hardware/version details. Host power being off by itself is not treated as a failure because it can be intentional.
+### Staged updates
 
-## Favorites, groups, tags and recently used devices
+Select multiple NanoKVM devices and start a staged update. The integration updates exactly one device at a time. After requesting the update it polls the device API and verifies that NanoKVM returns online and reports the expected/new application version. Only then is the next device started. A failed recovery or update stops the batch. Cancellation is honored between devices, so an update already running on a device is not interrupted mid-install.
 
-Favorite state, group names, tags and the last-used timestamp are stored in Home Assistant `.storage` under the integration's Remote Server data. They survive Home Assistant restarts and are not stored in Git or exposed as normal entity state.
+## Virtual Media Library
 
-On mobile the dashboard includes horizontally scrollable **Favorites** and **Recently used** sections. Device metadata can be edited from the dashboard or device overview.
+The library supports:
 
-## Event history
+- search,
+- sort by name/date/known size,
+- ISO/IMG type,
+- mounted state,
+- mount as CD-ROM or USB disk,
+- unmount,
+- favorites,
+- recent usage,
+- multi-select delete with mounted-image protection,
+- direct ISO upload through Home Assistant,
+- ISO download from URL,
+- optional SHA-256 verification,
+- NanoKVM-native transfer progress and cancellation.
 
-Remote Server stores up to 500 recent events. The history includes explicit management operations and state transitions detected while the panel is polling, including:
+Upstream NanoKVM's storage list returns image paths only. Therefore size and added date are displayed when Home Assistant knows them (for example, an ISO uploaded through this panel). Existing files discovered only through `/api/storage/image` intentionally show unknown size/date rather than fabricated metadata.
 
-- KVM online/offline;
-- host power on/off;
-- HDMI signal gained/lost;
-- host power/reset/force-off actions;
-- HID reset and NanoKVM reboot;
-- Virtual Media mount/unmount/delete/mode changes;
-- offline update;
-- Wake-on-LAN;
-- group/tag/favorite changes;
-- Wake-on-LAN profile changes.
+### ISO upload
 
-Management events include the Home Assistant user that initiated the operation and whether it succeeded or failed. Event history is local to Home Assistant `.storage`.
+The browser uploads the ISO to Home Assistant, which forwards it to NanoKVM's native `/api/download/file` endpoint. NanoKVM validates that the uploaded file is an ISO-9660 image. The panel accepts an optional SHA-256 checksum and forwards it using the upstream `X-SHA256-Sum` header.
 
-## Wake-on-LAN profiles
+### ISO URL download
 
-Each NanoKVM can have multiple persistent Wake-on-LAN profiles. A profile contains a display name and MAC address. Profiles can be created, edited, deleted and executed from **Maintenance**. The integration uses NanoKVM's existing Wake-on-LAN REST action, which accepts a MAC address.
+The URL is sent to NanoKVM's native `/api/download/image` background downloader. The panel polls `/api/download/image/status`, displays the upstream progress value, and can request cancellation through `/api/download/image/cancel`. URLs must use HTTP or HTTPS and end in a safe `.iso` filename. Credentials embedded in the URL are rejected.
 
-## Device views
+## HID Toolbox
 
-The sidepanel retains the device-focused views:
+HID Toolbox provides:
 
-- **KVM** — operational status, Health Score, host controls, HID controls, metadata and per-device event history.
-- **Media** — available ISO/IMG files, mounted image, CD-ROM/USB-disk mode, mount, unmount and delete operations.
-- **Maintenance** — Wake-on-LAN profiles, HID Reset, NanoKVM reboot, address copy, offline application update and event history.
-- **UI** — direct link to the original NanoKVM interface and optional in-panel iframe embedding.
+- HID reset,
+- keyboard/mouse reconnect (the upstream HID reset performs a USB PHY reset and reopens HID devices),
+- text paste,
+- keyboard LED state for NumLock, CapsLock and ScrollLock,
+- Normal / HID-only mode selection.
 
-## Mobile interface
+Changing HID mode follows upstream NanoKVM behavior and reboots the NanoKVM device after applying the mode. The panel displays an explicit warning before this operation.
 
-At widths up to 760 px the desktop rail is replaced by a touch-oriented layout:
+## Mobile UI
 
-- sticky header;
-- horizontally scrollable NanoKVM selector;
-- Favorites and Recently used strips on Dashboard;
-- fixed bottom navigation for Dashboard, KVM, Media, Maintenance and UI;
-- large touch targets for management actions;
-- safe-area spacing for phones with a home indicator/display cutout;
-- single-column action layouts on very narrow devices.
+At widths below 900 px the desktop sidebar is replaced by a bottom navigation bar. Cards and control groups collapse to one column where appropriate, touch targets remain large, and Home Assistant safe-area insets are respected.
 
-## Native UI embedding
+## Persistence
 
-Embedding is optional. Browsers block HTTP iframe content when Home Assistant itself is served over HTTPS. NanoKVM firmware or a reverse proxy can also block framing with CSP/X-Frame-Options. In those cases use **Open UI**, which opens the device interface directly in a new tab.
+Device organization and WOL metadata live in `nanokvm_rest.remote_server` under Home Assistant `.storage`. Advanced ISO favorites/recent usage/known metadata live in `nanokvm_rest.remote_advanced`. Update runtime state is intentionally in-memory; durable update outcomes are written to the normal Remote Server event history.
 
-## Access control
+## Security
 
-The sidepanel and all Home Assistant WebSocket/HTTP management endpoints require a Home Assistant administrator. NanoKVM operations that are administrator-only upstream additionally require the configured NanoKVM account to have the administrator role.
-
-Destructive operations retain backend validation for force-off, virtual-media deletion and offline updates. The UI uses confirmation dialogs for reset, force-off, NanoKVM reboot, image deletion and offline update.
-
-## Installation parity
-
-The Home Assistant app/add-on bundle contains the same integration tree as `custom_components/nanokvm_rest`. This keeps HACS/manual installations and app-based installations on the same feature set, including the Remote Server backend, persistent storage helpers and web frontend.
+The sidepanel requires a Home Assistant administrator. NanoKVM administrator-only operations additionally require an administrator account configured for that NanoKVM entry. Destructive actions are confirmed in the UI, mounted images cannot be bulk-deleted, uploaded filenames are restricted to safe `.iso` names, SHA-256 values are validated, and ISO URLs reject embedded credentials.
