@@ -11,7 +11,7 @@ from aiohttp import web
 import voluptuous as vol
 
 from homeassistant.components import panel_custom, websocket_api
-from homeassistant.components.http import HomeAssistantView, StaticPathConfig
+from homeassistant.components.http import KEY_HASS, HomeAssistantView, StaticPathConfig
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import Unauthorized
@@ -254,7 +254,7 @@ class NanoKVMOfflineUpdateView(HomeAssistantView):
         if not request["hass_user"].is_admin:
             raise Unauthorized
 
-        hass: HomeAssistant = request.app["hass"]
+        hass: HomeAssistant = request.app[KEY_HASS]
         coordinator = _loaded_coordinator(hass, entry_id)
         if coordinator is None:
             return self.json({"error": "NanoKVM is not loaded"}, status_code=404)
@@ -312,7 +312,10 @@ class NanoKVMOfflineUpdateView(HomeAssistantView):
             return self.json({"error": str(err)}, status_code=400)
         finally:
             if temp_path:
-                await hass.async_add_executor_job(Path(temp_path).unlink, missing_ok=True)
+                try:
+                    await hass.async_add_executor_job(os.remove, temp_path)
+                except FileNotFoundError:
+                    pass
 
 
 async def async_setup_remote_panel(hass: HomeAssistant) -> None:
