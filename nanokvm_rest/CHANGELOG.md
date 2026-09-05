@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.1
+
+- Refreshes **Remote Server** with a modern app-like visual design.
+- Adds a dedicated mobile layout instead of shrinking the desktop interface.
+- Adds a fixed bottom navigation bar on phones for Overview, Virtual Media, Maintenance and Native UI.
+- Adds horizontally scrollable NanoKVM device cards on mobile with online/offline and host-power indicators.
+- Adds a sticky mobile header and safe-area spacing for phones with display cutouts/home indicators.
+- Enlarges touch targets for power, reset, HID and maintenance actions.
+- Converts Virtual Media controls into responsive cards that remain usable on narrow screens.
+- Improves status cards, typography, spacing, rounded surfaces and Home Assistant theme integration.
+- Adds inline SVG icons without external frontend dependencies.
+- Adds an extra narrow-screen breakpoint for devices around 390 px wide.
+- Loads the redesigned sidepanel from `remote-server-v2.js` while keeping the existing backend/API unchanged.
+
 ## 0.6.0
 
 - Rebuilds **Remote Server** as a full Home Assistant sidepanel web interface.
