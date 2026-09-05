@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.10.0
+
+- Adds a fleet-wide **Operations Center** to the Remote Server sidepanel.
+- Adds one-minute API probes with NanoKVM response-latency measurement.
+- Persists compact five-minute metric samples in Home Assistant `.storage` and calculates 24-hour / 7-day availability.
+- Adds an advanced Health Score using API availability, HDMI state, latency, historical availability and update state.
+- Adds a central **Alert Center** for offline KVMs, missing HDMI signal, high latency, low availability, available updates and failed recovery actions.
+- Adds alert acknowledgement, Home Assistant persistent notifications and the `nanokvm_rest_operations_alert` event for automations.
+- Adds **Maintenance Mode** per NanoKVM with optional expiry and note; maintenance mutes alerts and pauses Auto Recovery.
+- Adds **Auto Recovery** for PCIe NanoKVM HDMI failures after three consecutive missing-signal checks, with cooldown and hourly attempt limits.
+- Auto Recovery deliberately does not perform destructive host power operations and does not pretend to repair a NanoKVM that is completely unreachable through its own API.
+- Adds a **Recovery Center** with diagnostics, safe HID+HDMI recovery, individual HID reset, HDMI reset and protected NanoKVM reboot.
+- Adds per-device power timeline and recent operations history.
+- Adds a responsive fleet UI with current latency, 24h/7d availability, Health Score, alert badges and latency sparkline.
+- Adds `operations.py`, `operations_store.py` and `remote-server-v6.js` while retaining Update Center, Virtual Media, HID Toolbox and Live KVM.
+- Keeps HACS/manual and Home Assistant app/add-on integration trees identical.
+- Bumps integration/app/container version to `0.10.0`.
+
+## 0.9.1
+
+- Adds the `show_sidebar_panel` integration option to show or hide Remote Server in the Home Assistant sidebar.
+- Keeps the panel visible while at least one configured NanoKVM requests it.
+- Separates backend registration from sidebar visibility to avoid duplicate WebSocket/HTTP registrations during reloads.
+
 ## 0.9.0
 
 - Adds a native **Remote Console / Live KVM** view directly inside the Home Assistant Remote Server sidepanel.
