@@ -38,5 +38,7 @@ fi
 rm -rf "${BACKUP}"
 sync
 
-echo "NanoKVM REST integration installed in ${TARGET}."
-echo "Restart Home Assistant, then add NanoKVM REST from Settings -> Devices & services -> Add integration."
+printf '\n'
+echo "SUCCESS: NanoKVM REST integration installed in ${TARGET}."
+echo "Next step: restart Home Assistant, then add NanoKVM REST from Settings -> Devices & services -> Add integration."
+echo "This add-on is a one-shot installer and will now stop normally. A stopped add-on after this SUCCESS message is expected."
