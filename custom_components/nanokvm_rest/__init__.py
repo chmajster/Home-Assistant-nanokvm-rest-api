@@ -16,6 +16,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import NanoKVMCoordinator
+from .panel import async_setup_remote_panel
 
 
 type NanoKVMConfigEntry = ConfigEntry[NanoKVMCoordinator]
@@ -36,6 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NanoKVMConfigEntry) -> b
     coordinator = NanoKVMCoordinator(hass, entry, client, scan_interval)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+    await async_setup_remote_panel(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
