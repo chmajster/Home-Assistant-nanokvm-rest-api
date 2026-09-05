@@ -342,7 +342,7 @@ async def async_setup_remote_panel(hass: HomeAssistant) -> None:
         webcomponent_name=PANEL_ELEMENT,
         sidebar_title="Remote Server",
         sidebar_icon="mdi:server-network",
-        module_url=f"{STATIC_URL}/remote-server.js?v=1",
+        module_url=f"{STATIC_URL}/remote-server-v2.js?v=2",
         embed_iframe=False,
         require_admin=True,
         handle_safe_area=True,
