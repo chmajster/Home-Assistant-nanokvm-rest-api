@@ -50,10 +50,12 @@
       "init": {
         "title": "Opcje NanoKVM",
         "data": {
+          "show_sidebar_panel": "Dodaj Remote Server do paska bocznego Home Assistant",
           "scan_interval": "Interwał odpytywania (sekundy)",
           "force_off_ms": "Czas przytrzymania wymuszonego wyłączenia (ms)"
         },
         "data_description": {
+          "show_sidebar_panel": "Pokazuje lub ukrywa panel Remote Server w pasku bocznym Home Assistant. Panel jest dostępny tylko dla administratorów. Przy wielu NanoKVM pozostaje widoczny, jeśli co najmniej jeden wpis ma tę opcję włączoną.",
           "scan_interval": "Jak często Home Assistant odświeża stan NanoKVM (30–3600 sekund).",
           "force_off_ms": "Jak długo przycisk zasilania jest przytrzymywany przy wymuszonym wyłączeniu (1000–10000 ms)."
         }
