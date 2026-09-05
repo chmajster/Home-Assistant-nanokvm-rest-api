@@ -1,6 +1,6 @@
 FROM ghcr.io/home-assistant/base:latest
 
-ARG BUILD_VERSION="0.10.1"
+ARG BUILD_VERSION="0.10.2"
 ARG BUILD_ARCH="amd64"
 
 # This add-on is intentionally a one-shot installer. The Home Assistant base image
