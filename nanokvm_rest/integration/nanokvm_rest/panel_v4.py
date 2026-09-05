@@ -1,4 +1,4 @@
-"""Remote Server panel setup with Live Remote Console support."""
+"""Remote Server panel setup with Live Remote Console and Operations Center support."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from . import panel_v2 as base
 from .advanced_store import RemoteAdvancedStore
 from .console import NanoKVMConsoleView, websocket_console_session
 from .const import DOMAIN
+from .operations import OPERATIONS_COMMANDS, async_setup_operations
 from .panel_ext import (
     DATA_ADVANCED_STORE,
     DATA_UPDATE_RUNTIME,
@@ -21,7 +22,7 @@ from .panel_ext import (
 
 PANEL_URL = base.PANEL_URL
 STATIC_URL = base.STATIC_URL
-PANEL_ELEMENT = "nanokvm-remote-server-panel-v5"
+PANEL_ELEMENT = "nanokvm-remote-server-panel-v6"
 DATA_PANEL_BACKEND_REGISTERED = f"{DOMAIN}_remote_panel_backend_registered"
 DATA_PANEL_VISIBLE_ENTRIES = f"{DOMAIN}_remote_panel_visible_entries"
 
@@ -41,6 +42,7 @@ async def async_setup_remote_panel(
         await advanced_store.async_load()
         hass.data[DATA_ADVANCED_STORE] = advanced_store
         hass.data.setdefault(DATA_UPDATE_RUNTIME, {"devices": {}, "batch": None})
+        await async_setup_operations(hass)
 
         base_commands = (
             base.websocket_list_devices,
@@ -52,7 +54,12 @@ async def async_setup_remote_panel(
             base.websocket_wol_delete,
             base.websocket_wol_run,
         )
-        for command in (*base_commands, *EXTENDED_COMMANDS, websocket_console_session):
+        for command in (
+            *base_commands,
+            *EXTENDED_COMMANDS,
+            *OPERATIONS_COMMANDS,
+            websocket_console_session,
+        ):
             websocket_api.async_register_command(hass, command)
 
         hass.http.register_view(base.NanoKVMOfflineUpdateView())
@@ -93,7 +100,7 @@ async def _async_sync_sidebar_panel(hass: HomeAssistant) -> None:
             webcomponent_name=PANEL_ELEMENT,
             sidebar_title="Remote Server",
             sidebar_icon="mdi:server-network",
-            module_url=f"{STATIC_URL}/remote-server-v5.js?v=5",
+            module_url=f"{STATIC_URL}/remote-server-v6.js?v=6",
             embed_iframe=False,
             require_admin=True,
             handle_safe_area=True,
