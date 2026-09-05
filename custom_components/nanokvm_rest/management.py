@@ -72,7 +72,9 @@ async def async_set_cdrom_mode(client: NanoKVMClient, cdrom: bool) -> None:
 
 def validate_offline_update(filename: str, checksum: str) -> tuple[str, str]:
     """Validate an offline update package filename and optional checksum."""
-    filename = Path(filename).name
+    filename = filename.strip()
+    if not filename or Path(filename).name != filename:
+        raise ValueError("package filename must not contain a path")
     checksum = checksum.strip()
     if not _OFFLINE_UPDATE_RE.fullmatch(filename):
         raise ValueError("package name must match nanokvm_X.Y.Z.tar.gz")
