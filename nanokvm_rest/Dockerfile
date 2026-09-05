@@ -1,7 +1,13 @@
 FROM ghcr.io/home-assistant/base:latest
 
-ARG BUILD_VERSION="0.10.0"
+ARG BUILD_VERSION="0.10.1"
 ARG BUILD_ARCH="amd64"
+
+# This add-on is intentionally a one-shot installer. The Home Assistant base image
+# uses s6-overlay, whose default verbosity prints the complete service shutdown
+# sequence when the installer exits successfully. Keep only real s6 errors so a
+# normal one-shot shutdown is not presented as an alarming warning/error log.
+ENV S6_VERBOSITY=0
 
 COPY integration /opt/integration
 COPY run.sh /run.sh
