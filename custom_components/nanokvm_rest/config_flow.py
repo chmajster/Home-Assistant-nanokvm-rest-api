@@ -18,9 +18,11 @@ from .const import (
     CONF_BASE_URL,
     CONF_FORCE_OFF_MS,
     CONF_SCAN_INTERVAL,
+    CONF_SHOW_SIDEBAR_PANEL,
     CONF_VERIFY_SSL,
     DEFAULT_FORCE_OFF_MS,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SHOW_SIDEBAR_PANEL,
     DOMAIN,
     MAX_FORCE_OFF_MS,
     MAX_SCAN_INTERVAL,
@@ -230,6 +232,13 @@ class NanoKVMOptionsFlow(OptionsFlowWithReload):
 
         schema = vol.Schema(
             {
+                vol.Required(
+                    CONF_SHOW_SIDEBAR_PANEL,
+                    default=self.config_entry.options.get(
+                        CONF_SHOW_SIDEBAR_PANEL,
+                        DEFAULT_SHOW_SIDEBAR_PANEL,
+                    ),
+                ): bool,
                 vol.Required(
                     CONF_SCAN_INTERVAL,
                     default=self.config_entry.options.get(
