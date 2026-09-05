@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+- Rebuilds **Remote Server** as a full Home Assistant sidepanel web interface.
+- Adds a persistent left-side NanoKVM device selector with online and host-power status.
+- Adds Overview, Virtual Media, Maintenance and Native UI views.
+- Adds 15-second selected-device refresh and periodic refresh of the complete KVM list.
+- Adds responsive desktop, tablet and mobile layouts using Home Assistant theme variables.
+- Adds confirmation prompts for destructive host reset, force-off, NanoKVM reboot, ISO deletion and offline update actions.
+- Adds direct access to the selected NanoKVM native web UI and optional iframe embedding when browser security rules allow it.
+- Adds address copy support and mixed-content detection for HTTPS Home Assistant with HTTP NanoKVM devices.
+- Makes `panel_custom` an explicit integration dependency so the sidepanel is initialized deterministically.
+- Aligns the integration, app package and container default version at `0.6.0`.
+
 ## 0.5.0
 
 - Adds the administrator-only **Remote Server** sidebar panel.
