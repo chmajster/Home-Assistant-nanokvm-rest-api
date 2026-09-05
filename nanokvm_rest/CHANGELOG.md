@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0
+
+- Adds an all-device **NanoKVM dashboard** with online/offline, host power, HDMI, version and health information.
+- Adds calculated **Health Score** with Healthy / Warning / Critical states and issue explanations.
+- Adds persistent **event history** for Remote Server actions plus detected KVM availability, host-power and HDMI transitions.
+- Adds dashboard **Quick Actions** for host power-on, reset, HID reset and opening the native NanoKVM UI.
+- Adds persistent **Favorites** and favorite-only filtering.
+- Adds persistent **Groups** for organizing NanoKVM devices.
+- Adds persistent **Tags** and group/tag/search filters.
+- Adds full-text device search across title, hostname, URL, hardware, group and tags.
+- Adds mobile **Favorites** and **Recently used** strips while retaining the mobile-first bottom navigation.
+- Adds persistent **Wake-on-LAN profiles** per NanoKVM with create/edit/delete/run controls.
+- Stores Remote Server metadata and event history in Home Assistant `.storage` instead of Git or entity state.
+- Adds audit information for management actions, including the Home Assistant user and success/error result.
+- Loads the new dashboard frontend from `remote-server-v3.js` with split CSS/i18n modules and no external frontend dependencies.
+- Synchronizes the Home Assistant app/add-on bundled integration with `custom_components/nanokvm_rest`, fixing missing Remote Server files in app-based installations.
+- Aligns HACS/manual and Home Assistant app/add-on packages at version `0.7.0`.
+
 ## 0.6.1
 
 - Refreshes **Remote Server** with a modern app-like visual design.
