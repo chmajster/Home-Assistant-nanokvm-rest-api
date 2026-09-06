@@ -1,17 +1,26 @@
-name: "NanoKVM REST"
+name: "NanoKVM Manager"
 slug: "nanokvm_rest"
 description: >-
-  Installs the NanoKVM REST custom integration into Home Assistant.
-version: "0.10.2"
+  NanoKVM fleet management Web UI with Home Assistant Ingress. Installs and
+  updates the NanoKVM REST integration and provides dashboard, operations,
+  updates, virtual media and HID management.
+version: "0.11.0"
 url: "https://github.com/chmajster/homeassistant-nanokvm-rest-api"
 arch:
   - amd64
   - aarch64
-startup: once
-boot: manual_only
+startup: application
+boot: auto
 init: false
 stage: stable
 homeassistant: "2026.8.0"
+ingress: true
+ingress_port: 8099
+homeassistant_api: true
+panel_admin: true
+panel_icon: "mdi:remote-desktop"
+panel_title: "NanoKVM Manager"
+watchdog: "http://[HOST]:[PORT:8099]/health/ready"
 map:
   - type: homeassistant_config
     read_only: false

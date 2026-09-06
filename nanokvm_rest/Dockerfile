@@ -1,27 +1,32 @@
-FROM ghcr.io/home-assistant/base:latest
+ARG BUILD_FROM=ghcr.io/home-assistant/base-python:3.14-alpine3.23
+FROM ${BUILD_FROM}
 
-ARG BUILD_VERSION="0.10.2"
+ARG BUILD_VERSION="0.11.0"
 ARG BUILD_ARCH="amd64"
 
-# This add-on is intentionally a one-shot installer. The Home Assistant base image
-# uses s6-overlay, whose default verbosity prints the complete service shutdown
-# sequence when the installer exits successfully. Keep only real s6 errors so a
-# normal one-shot shutdown is not presented as an alarming warning/error log.
-ENV S6_VERBOSITY=0
+COPY requirements.txt /tmp/requirements.txt
+RUN python3.14 -m venv /venv \
+    && /venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
 
 COPY integration /opt/integration
+COPY webui /opt/webui
 COPY run.sh /run.sh
-
 RUN chmod 0755 /run.sh
 
+ENV PATH="/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED="1" \
+    PYTHONDONTWRITEBYTECODE="1" \
+    BUILD_VERSION="${BUILD_VERSION}"
+
 LABEL \
-    io.hass.name="NanoKVM REST" \
-    io.hass.description="Installer for the NanoKVM REST Home Assistant integration" \
+    io.hass.name="NanoKVM Manager" \
+    io.hass.description="NanoKVM fleet management with Home Assistant Ingress" \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.type="app" \
     io.hass.arch="${BUILD_ARCH}" \
-    org.opencontainers.image.title="NanoKVM REST" \
-    org.opencontainers.image.description="Installs the NanoKVM REST custom integration into Home Assistant" \
+    org.opencontainers.image.title="NanoKVM Manager" \
+    org.opencontainers.image.description="NanoKVM remote management UI for Home Assistant" \
     org.opencontainers.image.version="${BUILD_VERSION}" \
     org.opencontainers.image.source="https://github.com/chmajster/homeassistant-nanokvm-rest-api"
 
