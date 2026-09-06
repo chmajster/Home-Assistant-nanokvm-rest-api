@@ -58,6 +58,13 @@ jobs:
           for file in custom_components/nanokvm_rest/www/*.js; do
             node --check "$file"
           done
+          python -m py_compile nanokvm_rest/webui/app.py
+          node --check nanokvm_rest/webui/static/app.js
+          bash -n nanokvm_rest/run.sh
+          test -s nanokvm_rest/icon.png
+          test -s nanokvm_rest/logo.png
+          grep -q '^ingress: true$' nanokvm_rest/config.yaml
+          grep -q '^panel_title: "NanoKVM Manager"$' nanokvm_rest/config.yaml
 
       - name: Run official HACS validation for public repository
         if: ${{ github.event.repository.private == false }}
