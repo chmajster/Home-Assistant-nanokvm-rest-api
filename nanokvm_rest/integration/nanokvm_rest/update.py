@@ -122,6 +122,8 @@ class NanoKVMApplicationUpdate(NanoKVMEntity, UpdateEntity):
             try:
                 await self.coordinator.client.async_update_application()
             except NanoKVMConnectionError:
+                # Expected on NanoKVM versions that restart the API service as
+                # part of update/install. Verification below determines success.
                 request_disconnect = True
             except NanoKVMError as err:
                 self._set_install_state(
