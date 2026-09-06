@@ -4,7 +4,7 @@ description: >-
   NanoKVM fleet management Web UI with Home Assistant Ingress. Installs and
   updates the NanoKVM REST integration and provides dashboard, operations,
   updates, virtual media and HID management.
-version: "0.11.0"
+version: "0.11.1"
 url: "https://github.com/chmajster/homeassistant-nanokvm-rest-api"
 arch:
   - amd64

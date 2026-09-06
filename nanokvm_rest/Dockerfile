@@ -1,7 +1,7 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/base-python:3.14-alpine3.23
 FROM ${BUILD_FROM}
 
-ARG BUILD_VERSION="0.11.0"
+ARG BUILD_VERSION="0.11.1"
 ARG BUILD_ARCH="amd64"
 
 COPY requirements.txt /tmp/requirements.txt
