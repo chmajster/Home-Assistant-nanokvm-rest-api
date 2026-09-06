@@ -1,24 +1,43 @@
-# NanoKVM REST Home Assistant app
+# NanoKVM Manager Home Assistant app
 
-This Home Assistant app installs the bundled `NanoKVM REST` custom integration into `/config/custom_components/nanokvm_rest` (mounted inside the app as `/homeassistant`).
+NanoKVM Manager is a persistent Home Assistant app/add-on with its own Web UI delivered through Home Assistant Ingress. It also keeps the bundled `NanoKVM REST` custom integration synchronized in `/config/custom_components/nanokvm_rest` (mounted inside the app as `/homeassistant`).
 
-The app is an installer, not a background NanoKVM service. It uses `startup: once` and stops after copying the integration.
+## Web UI and sidebar
 
-Version 0.4.0 bundles application updates, hostname/web-title controls, OLED/swap/memory configuration, virtual USB device switches and Home Assistant device actions/triggers.
+The app uses Home Assistant Ingress. After installation Home Assistant shows the native **Show in sidebar** switch on the app page. Enable it to add **NanoKVM Manager** to the Home Assistant sidebar.
+
+The Web UI includes:
+
+- fleet dashboard and device status,
+- host Power / Reset / HID Reset quick actions,
+- Operations Center and Health Score,
+- Alert Center and acknowledgements,
+- Recovery Center and Maintenance Mode,
+- Update Center with Stable/Preview channels,
+- Virtual Media library and URL ISO download,
+- HID Toolbox and text paste,
+- direct jump to the existing Remote Server / Live KVM panel.
+
+The add-on does not store a second copy of NanoKVM credentials. Its backend talks to the existing NanoKVM REST integration through the Home Assistant WebSocket API using `SUPERVISOR_TOKEN`. The browser never receives the Supervisor token.
 
 ## Installation
 
 1. Add `https://github.com/chmajster/homeassistant-nanokvm-rest-api` as a custom repository in the Home Assistant app/add-on store.
-2. Install **NanoKVM REST**.
-3. Start the app once.
-4. Check the app log for a successful installation message.
-5. Restart Home Assistant.
-6. Go to **Settings → Devices & services → Add integration** and select **NanoKVM REST**.
+2. Install **NanoKVM Manager**.
+3. Start the app. It now stays running because it serves the Ingress Web UI.
+4. Restart Home Assistant after the first install/update so the synchronized custom integration is reloaded.
+5. Go to **Settings → Devices & services → Add integration** and select **NanoKVM REST** if it has not been configured yet.
+6. Open the app page and enable **Show in sidebar** if you want the Ingress manager in the main navigation.
 
-## Updating
+## Security
 
-After updating the NanoKVM REST app, start it once again so the bundled integration is copied into Home Assistant, then restart Home Assistant.
+- Ingress access is restricted to Home Assistant administrators (`panel_admin: true`).
+- The backend also validates the Ingress `X-Remote-User-Id` against the Home Assistant administrator group.
+- `SUPERVISOR_TOKEN` stays server-side.
+- Browser actions are limited to an allowlist of NanoKVM REST WebSocket commands.
+- Mutating requests require the app-specific request header and JSON content type.
+- No external port is exposed by default.
 
-## Important
+## Existing Remote Server sidebar panel
 
-The repository must be reachable by Home Assistant Supervisor. A private GitHub repository cannot be cloned by a normal custom-repository installation unless Supervisor has a supported authenticated Git source.
+The custom integration still provides its own **Remote Server** panel, including Live KVM. It is independent from the app Ingress panel. If you only want one sidebar entry, disable `Show Remote Server in Home Assistant sidebar` in the NanoKVM REST integration options and use the app's **Show in sidebar** switch instead.
