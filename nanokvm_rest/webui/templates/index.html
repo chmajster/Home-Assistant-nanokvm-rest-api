@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#08111f">
   <title>NanoKVM Manager</title>
   <link rel="stylesheet" href="static/style.css?v={{ version }}">
 </head>
@@ -28,7 +29,7 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
+        <div class="topbar-title">
           <h1 id="page-title">Dashboard</h1>
           <p id="page-subtitle">Centrum zdalnego zarządzania NanoKVM</p>
         </div>
@@ -43,12 +44,14 @@
     </main>
   </div>
 
-  <nav class="mobile-nav">
-    <button data-view="overview" class="active">Start</button>
-    <button data-view="devices">KVM</button>
-    <button data-view="operations">Ops</button>
-    <button data-view="alerts">Alerty</button>
-    <button data-view="updates">Update</button>
+  <nav class="mobile-nav" aria-label="Nawigacja NanoKVM Manager">
+    <button data-view="overview" class="active"><span>Start</span></button>
+    <button data-view="devices"><span>KVM</span></button>
+    <button data-view="operations"><span>Ops</span></button>
+    <button data-view="alerts"><span>Alerty</span></button>
+    <button data-view="updates"><span>Update</span></button>
+    <button data-view="media"><span>Media</span></button>
+    <button data-view="hid"><span>HID</span></button>
   </nav>
 
   <script src="static/app.js?v={{ version }}"></script>
