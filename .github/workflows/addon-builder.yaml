@@ -1,0 +1,46 @@
+name: Build NanoKVM REST add-on
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "nanokvm_rest/**"
+      - ".github/workflows/addon-builder.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} NanoKVM REST
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - aarch64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish add-on image
+        uses: home-assistant/builder@2025.09.0
+        with:
+          args: |
+            --${{ matrix.arch }} \
+            --target /data/nanokvm_rest \
+            --image "{arch}-addon-nanokvm_rest" \
+            --docker-hub "ghcr.io/${{ github.repository_owner }}" \
+            --addon
