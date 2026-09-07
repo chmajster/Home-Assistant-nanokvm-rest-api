@@ -97,28 +97,71 @@ class NanoKVMApplicationUpdate(NanoKVMEntity, UpdateEntity):
         self._install_message = message
         self.async_write_ha_state()
 
+    async def _refresh_coordinator_after_update(self) -> None:
+        """Refresh HA state after a version change without reusing the stale cache."""
+        self.coordinator.invalidate_application_version()
+        await self.coordinator.async_request_refresh()
+
     async def async_install(
         self, version: str | None, backup: bool, **kwargs: Any
     ) -> None:
-        """Install the latest NanoKVM application release.
+        """Install the latest release from the NanoKVM configured update channel.
 
         NanoKVM may intentionally close the HTTP connection while its application
         service restarts. Treat that disconnect as an expected transition, wait
-        for the device to return, and verify the reported application version
-        before declaring the installation successful.
+        for the device to return, and verify that the version reaches the target
+        reported by NanoKVM before declaring the installation successful.
         """
-        before = self.installed_version or ""
-        target = version or self.latest_version or ""
-
         self._installing = True
         self._install_started_at = datetime.now(timezone.utc).isoformat()
         self._set_install_state(
-            "installing",
-            "Update request sent to NanoKVM. Do not power off the device.",
+            "checking",
+            "Checking the latest NanoKVM application version before update.",
         )
 
-        request_disconnect = False
+        before = self.installed_version or ""
+        target = version or self.latest_version or ""
+
         try:
+            # Home Assistant may still hold a cached latest_version. Query the
+            # device immediately before starting the update so POST /update and
+            # our verification use the same NanoKVM update channel.
+            try:
+                fresh = await self.coordinator.client.async_get_application_version()
+                fresh_current = str(fresh.get("current") or "")
+                fresh_latest = str(fresh.get("latest") or "")
+                if fresh_current:
+                    before = fresh_current
+                if fresh_latest:
+                    target = fresh_latest
+            except NanoKVMError as err:
+                if not target:
+                    self._set_install_state(
+                        "failed",
+                        f"Could not determine the latest NanoKVM version: {err}",
+                    )
+                    raise HomeAssistantError(
+                        f"NanoKVM latest version could not be determined: {err}"
+                    ) from err
+
+            if before and target and before == target:
+                await self._refresh_coordinator_after_update()
+                self._set_install_state(
+                    "completed",
+                    f"NanoKVM already reports the latest version {before}.",
+                )
+                return
+
+            self._set_install_state(
+                "installing",
+                (
+                    f"Updating NanoKVM from {before or 'unknown'} to "
+                    f"{target or 'the latest available version'}. "
+                    "Do not power off the device."
+                ),
+            )
+
+            request_disconnect = False
             try:
                 await self.coordinator.client.async_update_application()
             except NanoKVMConnectionError:
@@ -142,55 +185,73 @@ class NanoKVMApplicationUpdate(NanoKVMEntity, UpdateEntity):
                     "This can be normal while the NanoKVM application restarts. "
                     "Waiting for the device to return and verifying its version."
                     if request_disconnect
-                    else "Update request accepted. Waiting for NanoKVM to restart and report the new version."
+                    else "Update request accepted. Waiting for NanoKVM to restart and report the target version."
                 ),
             )
 
             attempts = max(1, UPDATE_RECOVERY_TIMEOUT // UPDATE_RECOVERY_INTERVAL)
             last_error = "connection lost" if request_disconnect else ""
             last_version = before
+            last_reported_latest = target
 
             for _ in range(attempts):
                 await asyncio.sleep(UPDATE_RECOVERY_INTERVAL)
                 try:
                     data = await self.coordinator.client.async_get_application_version()
                     current = str(data.get("current") or "")
-                    reported_latest = str(data.get("latest") or target or "")
+                    reported_latest = str(data.get("latest") or "")
                     if current:
                         last_version = current
+                    if reported_latest:
+                        last_reported_latest = reported_latest
+
+                    expected = reported_latest or target
 
                     self._set_install_state(
                         "verifying",
-                        f"NanoKVM is online. Verifying application version ({current or 'unknown'}).",
+                        (
+                            "NanoKVM is online. Verifying application version "
+                            f"({current or 'unknown'} / target {expected or 'unknown'})."
+                        ),
                     )
 
-                    if current and (
-                        (target and current == target)
-                        or (before and current != before)
-                        or (not before and current)
-                    ):
-                        self.coordinator.invalidate_application_version()
+                    # When a target is known, never treat an arbitrary version
+                    # change as success. The update is complete only when the
+                    # installed version matches the latest version currently
+                    # reported by NanoKVM (or the pre-update target if the
+                    # endpoint temporarily omits `latest`).
+                    if current and expected and current == expected:
+                        await self._refresh_coordinator_after_update()
                         self._set_install_state(
                             "completed",
                             (
-                                f"Update completed successfully: {before or 'unknown'} → {current}."
-                                if before != current
-                                else f"Update completed successfully. NanoKVM reports version {current}."
+                                f"Update completed successfully: "
+                                f"{before or 'unknown'} → {current}."
                             ),
                         )
                         return
 
-                    if current and reported_latest and current == reported_latest:
-                        self.coordinator.invalidate_application_version()
+                    # Backward-compatible fallback for firmware that exposes a
+                    # current version but no latest version at all.
+                    if (
+                        current
+                        and not expected
+                        and ((before and current != before) or not before)
+                    ):
+                        await self._refresh_coordinator_after_update()
                         self._set_install_state(
                             "completed",
-                            f"NanoKVM is online and reports the latest version {current}.",
+                            (
+                                f"Update completed successfully: "
+                                f"{before or 'unknown'} → {current}."
+                            ),
                         )
                         return
 
                     last_error = (
-                        f"NanoKVM returned online but still reports version "
-                        f"{current or 'unknown'}"
+                        "NanoKVM returned online but has not reached the target "
+                        f"version yet (current {current or 'unknown'}, "
+                        f"target {expected or 'unknown'})"
                     )
                 except NanoKVMError as err:
                     last_error = str(err)
@@ -202,6 +263,8 @@ class NanoKVMApplicationUpdate(NanoKVMEntity, UpdateEntity):
             detail = (
                 f" Last reported version: {last_version}." if last_version else ""
             )
+            if last_reported_latest:
+                detail += f" Expected latest version: {last_reported_latest}."
             if last_error:
                 detail += f" Last connection status: {last_error}."
             message = (
