@@ -12,7 +12,8 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import NanoKVMAuthError, NanoKVMClient, NanoKVMError
+from .api import NanoKVMAuthError, NanoKVMError
+from .client import NanoKVMClient
 from .const import (
     CONF_BASE_URL,
     CONF_FORCE_OFF_MS,
