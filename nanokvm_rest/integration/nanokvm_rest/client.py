@@ -278,8 +278,7 @@ class NanoKVMClient(_BaseNanoKVMClient):
         message = str(data.get("msg") or "NanoKVM authentication error")
         normalized = message.casefold()
         if (
-            code in {-2, -4}
-            or "invalid username or password" in normalized
+            "invalid username or password" in normalized
             or "invalid login or password" in normalized
             or "invalid credentials" in normalized
         ):
