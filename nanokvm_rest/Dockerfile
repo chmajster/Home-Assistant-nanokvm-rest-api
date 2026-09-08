@@ -1,6 +1,6 @@
 FROM ghcr.io/home-assistant/base-python:3.14-alpine3.23
 
-ARG BUILD_VERSION="0.11.6"
+ARG BUILD_VERSION="0.11.7"
 ARG BUILD_ARCH="amd64"
 
 COPY requirements.txt /tmp/requirements.txt
