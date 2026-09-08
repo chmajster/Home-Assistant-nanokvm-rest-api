@@ -12,7 +12,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import NanoKVMAuthError, NanoKVMError
+from .api import NanoKVMAPIError, NanoKVMAuthError, NanoKVMError
 from .client import NanoKVMClient
 from .const import (
     CONF_BASE_URL,
@@ -32,23 +32,41 @@ from .const import (
 
 
 def normalize_base_url(value: str) -> str:
-    """Normalize and validate a NanoKVM base URL."""
-    value = value.strip().rstrip("/")
-    if not value.startswith(("http://", "https://")):
-        value = f"http://{value}"
+    """Normalize and validate a NanoKVM origin.
+
+    When no scheme is supplied, prefer HTTPS. The client will automatically
+    fall back to HTTP if NanoKVM does not serve HTTPS.
+    """
+    value = value.strip()
+    if not value:
+        raise ValueError("invalid URL")
+
+    if "://" not in value:
+        value = f"https://{value}"
 
     parsed = urlparse(value)
+    scheme = parsed.scheme.casefold()
+
+    try:
+        parsed_port = parsed.port
+    except ValueError as err:
+        raise ValueError("invalid URL") from err
+
     if (
-        parsed.scheme not in {"http", "https"}
+        scheme not in {"http", "https"}
         or not parsed.netloc
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
+        or parsed.params
         or parsed.query
         or parsed.fragment
+        or parsed.path not in {"", "/"}
+        or parsed_port is not None and not 1 <= parsed_port <= 65535
     ):
         raise ValueError("invalid URL")
-    return value
+
+    return f"{scheme}://{parsed.netloc}"
 
 
 class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -70,11 +88,22 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data[CONF_USERNAME],
             data[CONF_PASSWORD],
         )
+
         await client.async_login()
+        data[CONF_BASE_URL] = client.base_url
+
         info = await client.async_get_info()
-        hostname = await client.async_get_hostname()
-        device_key = str(info.get("deviceKey") or base_url)
-        title = str(hostname.get("hostname") or "NanoKVM")
+        try:
+            hostname = await client.async_get_hostname()
+        except NanoKVMAPIError:
+            hostname = {}
+
+        device_key = str(info.get("deviceKey") or client.base_url)
+        title = str(
+            hostname.get("hostname")
+            or urlparse(client.base_url).hostname
+            or "NanoKVM"
+        )
         return device_key, title
 
     async def async_step_user(
@@ -132,6 +161,8 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 device_key, _ = await self._async_validate(data)
+            except ValueError:
+                errors["base"] = "invalid_url"
             except NanoKVMAuthError:
                 errors["base"] = "invalid_auth"
             except NanoKVMError:
@@ -142,6 +173,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(
                     entry,
                     data_updates={
+                        CONF_BASE_URL: data[CONF_BASE_URL],
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                     },
