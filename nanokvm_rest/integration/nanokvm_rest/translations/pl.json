@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Połącz z NanoKVM",
-        "description": "Krok 1 z 3: test połączenia sieciowego i HTTP/HTTPS. W tym kroku dane logowania nie są wysyłane.",
+        "description": "Krok 1 z 3: sprawdź, czy podany adres odpowiada prawidłowemu API NanoKVM przez HTTP/HTTPS. W tym kroku dane logowania nie są wysyłane.",
         "data": {
           "base_url": "Adres NanoKVM",
           "verify_ssl": "Weryfikuj certyfikat TLS"
@@ -44,9 +44,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Nie można połączyć się z NanoKVM.",
-      "invalid_auth": "Nieprawidłowy login lub hasło.",
-      "invalid_url": "Nieprawidłowy adres NanoKVM."
+      "cannot_connect": "Nie można połączyć się z prawidłowym API NanoKVM. Sprawdź adres, port, reguły VLAN/firewall oraz czy Home Assistant ma dostęp sieciowy do urządzenia.",
+      "invalid_auth": "Nieprawidłowy login lub hasło NanoKVM.",
+      "invalid_url": "Nieprawidłowy adres NanoKVM.",
+      "permission_denied": "Konto NanoKVM nie ma uprawnień do wymaganego endpointu konfiguracji. Użyj konta administratora lub zmień uprawnienia konta.",
+      "ssl_error": "Nie udało się zweryfikować certyfikatu TLS. Sprawdź nazwę hosta i certyfikat albo wyłącz weryfikację TLS tylko wtedy, gdy ufasz temu NanoKVM i sieci."
     },
     "abort": {
       "already_configured": "To urządzenie NanoKVM jest już skonfigurowane.",
