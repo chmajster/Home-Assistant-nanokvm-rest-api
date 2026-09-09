@@ -12,6 +12,7 @@ from . import panel_v2 as base
 from .advanced_store import RemoteAdvancedStore
 from .console import NanoKVMConsoleView, websocket_console_session
 from .const import DOMAIN
+from .device_setup import DEVICE_SETUP_COMMANDS
 from .operations import OPERATIONS_COMMANDS, async_setup_operations
 from .panel_ext import (
     DATA_ADVANCED_STORE,
@@ -56,6 +57,7 @@ async def async_setup_remote_panel(
         )
         for command in (
             *base_commands,
+            *DEVICE_SETUP_COMMANDS,
             *EXTENDED_COMMANDS,
             *OPERATIONS_COMMANDS,
             websocket_console_session,
