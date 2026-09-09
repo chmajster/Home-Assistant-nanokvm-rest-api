@@ -47,7 +47,7 @@ class IntegrationContractTests(unittest.TestCase):
         )
         version = manifest["version"]
         self.assertEqual(version, bundled_manifest["version"])
-        self.assertRegex(addon_config, rf'^version: "{re.escape(version)}"$', re.MULTILINE)
+        self.assertRegex(addon_config, rf'(?m)^version: "{re.escape(version)}"$')
         self.assertIn(f'ARG BUILD_VERSION="{version}"', dockerfile)
 
     def test_setup_error_messages_are_translated(self) -> None:
@@ -77,7 +77,7 @@ class IntegrationContractTests(unittest.TestCase):
         self.assertIn('info = await self.client.async_get_info()', source)
         for capability in ("hardware", "gpio", "hostname"):
             self.assertIn(f'"{capability}"', source)
-            self.assertIn('tolerate_api_errors=True', source)
+        self.assertGreaterEqual(source.count('tolerate_api_errors=True'), 3)
 
 
 if __name__ == "__main__":
