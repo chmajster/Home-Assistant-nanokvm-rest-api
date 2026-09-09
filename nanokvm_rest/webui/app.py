@@ -44,6 +44,9 @@ WRITE_COMMANDS = {
     "nanokvm_rest/panel/media/download/start",
     "nanokvm_rest/panel/media/download/cancel",
     "nanokvm_rest/panel/hid/action",
+    "nanokvm_rest/panel/device/test_connection",
+    "nanokvm_rest/panel/device/test_authentication",
+    "nanokvm_rest/panel/device/create",
 }
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -198,7 +201,11 @@ def api_rpc() -> Response:
         return jsonify({"ok": False, "error": "Command is not allowed"}), 400
     payload = {key: value for key, value in body.items() if key != "id"}
     try:
-        result = ha_ws_call(payload, timeout=30.0 if command_type.endswith("/device") else 15.0)
+        long_running = (
+            command_type.endswith("/device")
+            or command_type.startswith("nanokvm_rest/panel/device/")
+        )
+        result = ha_ws_call(payload, timeout=30.0 if long_running else 15.0)
         return jsonify({"ok": True, "result": result})
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
