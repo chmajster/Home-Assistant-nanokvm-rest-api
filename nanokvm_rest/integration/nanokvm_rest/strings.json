@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to NanoKVM",
-        "description": "Step 1 of 3: test network and HTTP/HTTPS connectivity. Credentials are not sent during this step.",
+        "description": "Step 1 of 3: verify that the address belongs to a NanoKVM API over HTTP/HTTPS. Credentials are not sent during this step.",
         "data": {
           "base_url": "NanoKVM address",
           "verify_ssl": "Verify TLS certificate"
@@ -44,9 +44,11 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to NanoKVM.",
-      "invalid_auth": "Invalid username or password.",
-      "invalid_url": "Invalid NanoKVM address."
+      "cannot_connect": "Unable to reach a valid NanoKVM API. Check the address, port, VLAN/firewall rules and whether Home Assistant can reach the device.",
+      "invalid_auth": "Invalid NanoKVM username or password.",
+      "invalid_url": "Invalid NanoKVM address.",
+      "permission_denied": "The NanoKVM account does not have permission to access a required setup endpoint. Try an administrator account or adjust account permissions.",
+      "ssl_error": "TLS certificate validation failed. Verify the hostname/certificate, or disable TLS certificate verification only if you trust this NanoKVM and its network."
     },
     "abort": {
       "already_configured": "This NanoKVM device is already configured.",

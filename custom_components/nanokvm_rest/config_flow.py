@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,7 +13,12 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import NanoKVMAPIError, NanoKVMAuthError, NanoKVMError
+from .api import (
+    NanoKVMAPIError,
+    NanoKVMAuthError,
+    NanoKVMError,
+    NanoKVMPermissionError,
+)
 from .client import NanoKVMClient
 from .const import (
     CONF_BASE_URL,
@@ -30,6 +36,8 @@ from .const import (
     MIN_SCAN_INTERVAL,
 )
 from .device_setup import async_probe_connection
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def normalize_base_url(value: str) -> str:
@@ -70,6 +78,13 @@ def normalize_base_url(value: str) -> str:
     return f"{scheme}://{parsed.netloc}"
 
 
+def _api_error_key(err: NanoKVMAPIError) -> str:
+    """Map API diagnostics to a stable config-flow error key."""
+    if err.code == "ssl_error":
+        return "ssl_error"
+    return "cannot_connect"
+
+
 class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle NanoKVM REST setup."""
 
@@ -105,11 +120,20 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         info = await client.async_get_info()
         try:
             hostname = await client.async_get_hostname()
-        except NanoKVMAPIError:
-            # Hostname is cosmetic and older firmware may not expose the endpoint.
+        except (NanoKVMAPIError, NanoKVMPermissionError) as err:
+            # Hostname is cosmetic and older firmware/restricted accounts may
+            # not expose the endpoint.
+            _LOGGER.debug("NanoKVM hostname unavailable during setup: %s", err)
             hostname = {}
 
-        device_key = str(info.get("deviceKey") or client.base_url)
+        raw_device_key = info.get("deviceKey")
+        device_key = str(raw_device_key or client.base_url)
+        if not raw_device_key:
+            _LOGGER.warning(
+                "NanoKVM at %s did not return deviceKey; using URL as unique ID. "
+                "Changing the device IP/hostname may create a duplicate entry.",
+                client.base_url,
+            )
         title = str(
             hostname.get("hostname")
             or urlparse(client.base_url).hostname
@@ -132,9 +156,14 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     base_url,
                     verify_ssl,
                 )
-            except ValueError:
+            except ValueError as err:
+                _LOGGER.debug("Invalid NanoKVM URL: %s", err)
                 errors["base"] = "invalid_url"
-            except NanoKVMError:
+            except NanoKVMAPIError as err:
+                _LOGGER.warning("NanoKVM connection probe API/TLS failure: %s", err)
+                errors["base"] = _api_error_key(err)
+            except NanoKVMError as err:
+                _LOGGER.warning("NanoKVM connection probe failed: %s", err)
                 errors["base"] = "cannot_connect"
             else:
                 self._pending_data = {
@@ -172,11 +201,20 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 device_key, title = await self._async_validate(data)
-            except ValueError:
+            except ValueError as err:
+                _LOGGER.debug("Invalid NanoKVM URL during authentication: %s", err)
                 errors["base"] = "invalid_url"
-            except NanoKVMAuthError:
+            except NanoKVMAuthError as err:
+                _LOGGER.warning("NanoKVM authentication rejected: %s", err)
                 errors["base"] = "invalid_auth"
-            except NanoKVMError:
+            except NanoKVMPermissionError as err:
+                _LOGGER.warning("NanoKVM account lacks required setup permission: %s", err)
+                errors["base"] = "permission_denied"
+            except NanoKVMAPIError as err:
+                _LOGGER.warning("NanoKVM API failure during authentication: %s", err)
+                errors["base"] = _api_error_key(err)
+            except NanoKVMError as err:
+                _LOGGER.warning("NanoKVM connection failed during authentication: %s", err)
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(device_key)
@@ -250,6 +288,10 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_url"
             except NanoKVMAuthError:
                 errors["base"] = "invalid_auth"
+            except NanoKVMPermissionError:
+                errors["base"] = "permission_denied"
+            except NanoKVMAPIError as err:
+                errors["base"] = _api_error_key(err)
             except NanoKVMError:
                 errors["base"] = "cannot_connect"
             else:
@@ -299,6 +341,10 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_url"
             except NanoKVMAuthError:
                 errors["base"] = "invalid_auth"
+            except NanoKVMPermissionError:
+                errors["base"] = "permission_denied"
+            except NanoKVMAPIError as err:
+                errors["base"] = _api_error_key(err)
             except NanoKVMError:
                 errors["base"] = "cannot_connect"
             else:
