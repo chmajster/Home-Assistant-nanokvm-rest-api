@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
+import urllib.error
+import urllib.request
 from functools import wraps
 from typing import Any, Callable, TypeVar, cast
 
@@ -12,9 +15,11 @@ from flask import Flask, Response, abort, jsonify, render_template, request
 
 APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.0")
 HA_WS_URL = os.environ.get("HA_WS_URL", "ws://supervisor/core/websocket")
+HA_API_URL = os.environ.get("HA_API_URL", "http://supervisor/core/api").rstrip("/")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 ADMIN_GROUP = "system-admin"
 USER_CACHE_SECONDS = 30
+_FLOW_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
 READ_COMMANDS = {
     "nanokvm_rest/panel/list",
@@ -44,9 +49,6 @@ WRITE_COMMANDS = {
     "nanokvm_rest/panel/media/download/start",
     "nanokvm_rest/panel/media/download/cancel",
     "nanokvm_rest/panel/hid/action",
-    "nanokvm_rest/panel/device/test_connection",
-    "nanokvm_rest/panel/device/test_authentication",
-    "nanokvm_rest/panel/device/create",
 }
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -116,6 +118,62 @@ def ha_ws_call(message: dict[str, Any], *, timeout: float = 15.0) -> Any:
                 pass
 
 
+def ha_api_call(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """Call a Home Assistant REST endpoint through Supervisor."""
+    if not SUPERVISOR_TOKEN:
+        raise HAError("SUPERVISOR_TOKEN is not available. Check homeassistant_api in the add-on configuration.")
+
+    body = None
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {SUPERVISOR_TOKEN}",
+    }
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(
+        f"{HA_API_URL}/{path.lstrip('/')}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as err:
+        raw = err.read().decode("utf-8", errors="replace")
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {}
+        message = (
+            data.get("message")
+            or data.get("error")
+            or raw.strip()
+            or f"Home Assistant HTTP {err.code}"
+        )
+        raise HAError(str(message)) from err
+    except (OSError, urllib.error.URLError, TimeoutError) as err:
+        raise HAError(str(err)) from err
+
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise HAError("Home Assistant returned invalid JSON") from err
+    if not isinstance(data, dict):
+        raise HAError("Home Assistant returned an invalid API response")
+    return data
+
+
 def _users() -> list[dict[str, Any]]:
     now = time.monotonic()
     with _user_cache_lock:
@@ -158,6 +216,41 @@ def require_write_header() -> None:
         abort(415)
 
 
+def _flow_id(body: dict[str, Any]) -> str:
+    flow_id = str(body.get("setup_id") or "")
+    if not _FLOW_ID_RE.fullmatch(flow_id):
+        raise ValueError("Invalid setup session")
+    return flow_id
+
+
+def _flow_error(result: dict[str, Any], fallback: str) -> str:
+    errors = result.get("errors") or {}
+    if isinstance(errors, dict) and errors:
+        value = next(iter(errors.values()))
+        labels = {
+            "cannot_connect": "Nie można połączyć się z NanoKVM.",
+            "invalid_auth": "Nieprawidłowy login lub hasło.",
+            "invalid_url": "Nieprawidłowy adres NanoKVM.",
+        }
+        return labels.get(str(value), str(value).replace("_", " "))
+    reason = result.get("reason")
+    if reason == "already_configured":
+        return "To urządzenie NanoKVM jest już skonfigurowane."
+    return str(reason or fallback).replace("_", " ")
+
+
+def _abort_flow_safely(flow_id: str) -> None:
+    try:
+        ha_api_call("DELETE", f"config/config_entries/flow/{flow_id}", timeout=10.0)
+    except HAError:
+        pass
+
+
+def _commands_not_registered(err: HAError) -> bool:
+    text = str(err).casefold()
+    return "unknown command" in text or "not found" in text
+
+
 @app.after_request
 def security_headers(response: Response) -> Response:
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -188,7 +281,143 @@ def api_bootstrap() -> Response:
         updates = ha_ws_call({"type": "nanokvm_rest/panel/update/list"})
         return jsonify({"ok": True, "devices": devices, "operations": operations, "updates": updates})
     except HAError as err:
+        if _commands_not_registered(err):
+            return jsonify(
+                {
+                    "ok": True,
+                    "devices": {"devices": [], "groups": [], "tags": []},
+                    "operations": {"summary": {}, "devices": [], "alerts": []},
+                    "updates": {"devices": []},
+                }
+            )
         return jsonify({"ok": False, "error": str(err)}), 502
+
+
+@app.post("/api/device/setup/connection")
+@require_admin
+def api_device_setup_connection() -> tuple[Response, int] | Response:
+    """Start config flow and run the credential-free connection test."""
+    require_write_header()
+    body = request.get_json(silent=True) or {}
+    base_url = str(body.get("base_url") or "").strip()
+    verify_ssl = bool(body.get("verify_ssl", True))
+    if not base_url:
+        return jsonify({"ok": False, "error": "Podaj adres NanoKVM."}), 400
+
+    try:
+        start = ha_api_call(
+            "POST",
+            "config/config_entries/flow",
+            {"handler": "nanokvm_rest"},
+        )
+        flow_id = str(start.get("flow_id") or "")
+        if start.get("type") != "form" or start.get("step_id") != "user" or not flow_id:
+            return jsonify({"ok": False, "error": _flow_error(start, "Nie można uruchomić konfiguracji NanoKVM.")}), 502
+
+        result = ha_api_call(
+            "POST",
+            f"config/config_entries/flow/{flow_id}",
+            {"base_url": base_url, "verify_ssl": verify_ssl},
+        )
+        if result.get("type") == "form" and result.get("step_id") == "auth":
+            placeholders = result.get("description_placeholders") or {}
+            return jsonify(
+                {
+                    "ok": True,
+                    "setup_id": flow_id,
+                    "base_url": placeholders.get("base_url") or base_url,
+                }
+            )
+
+        _abort_flow_safely(flow_id)
+        return jsonify({"ok": False, "error": _flow_error(result, "Test połączenia nie powiódł się.")}), 400
+    except HAError as err:
+        return jsonify({"ok": False, "error": str(err)}), 502
+
+
+@app.post("/api/device/setup/authentication")
+@require_admin
+def api_device_setup_authentication() -> tuple[Response, int] | Response:
+    """Continue the same config flow and test credentials."""
+    require_write_header()
+    body = request.get_json(silent=True) or {}
+    try:
+        flow_id = _flow_id(body)
+    except ValueError as err:
+        return jsonify({"ok": False, "error": str(err)}), 400
+
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    if not username or not password:
+        return jsonify({"ok": False, "error": "Podaj nazwę użytkownika i hasło."}), 400
+
+    try:
+        result = ha_api_call(
+            "POST",
+            f"config/config_entries/flow/{flow_id}",
+            {"username": username, "password": password},
+        )
+        if result.get("type") == "form" and result.get("step_id") == "confirm":
+            placeholders = result.get("description_placeholders") or {}
+            return jsonify(
+                {
+                    "ok": True,
+                    "setup_id": flow_id,
+                    "title": placeholders.get("title") or "NanoKVM",
+                    "device_key": placeholders.get("device_key") or "",
+                    "base_url": placeholders.get("base_url") or "",
+                }
+            )
+
+        status = 409 if result.get("reason") == "already_configured" else 400
+        return jsonify({"ok": False, "error": _flow_error(result, "Test autentykacji nie powiódł się.")}), status
+    except HAError as err:
+        return jsonify({"ok": False, "error": str(err)}), 502
+
+
+@app.post("/api/device/setup/create")
+@require_admin
+def api_device_setup_create() -> tuple[Response, int] | Response:
+    """Confirm the already validated flow and create the config entry."""
+    require_write_header()
+    body = request.get_json(silent=True) or {}
+    try:
+        flow_id = _flow_id(body)
+    except ValueError as err:
+        return jsonify({"ok": False, "error": str(err)}), 400
+
+    try:
+        result = ha_api_call(
+            "POST",
+            f"config/config_entries/flow/{flow_id}",
+            {},
+        )
+        if result.get("type") == "create_entry":
+            entry = result.get("result") or {}
+            return jsonify(
+                {
+                    "ok": True,
+                    "entry_id": entry.get("entry_id") or entry.get("entry_id") or "",
+                    "title": entry.get("title") or result.get("title") or "NanoKVM",
+                }
+            )
+        return jsonify({"ok": False, "error": _flow_error(result, "Nie udało się dodać urządzenia.")}), 400
+    except HAError as err:
+        return jsonify({"ok": False, "error": str(err)}), 502
+
+
+@app.post("/api/device/setup/cancel")
+@require_admin
+def api_device_setup_cancel() -> Response:
+    """Abort an unfinished staged setup flow."""
+    require_write_header()
+    body = request.get_json(silent=True) or {}
+    try:
+        flow_id = _flow_id(body)
+    except ValueError:
+        return jsonify({"ok": True})
+    _abort_flow_safely(flow_id)
+    return jsonify({"ok": True})
 
 
 @app.post("/api/rpc")
@@ -201,11 +430,7 @@ def api_rpc() -> Response:
         return jsonify({"ok": False, "error": "Command is not allowed"}), 400
     payload = {key: value for key, value in body.items() if key != "id"}
     try:
-        long_running = (
-            command_type.endswith("/device")
-            or command_type.startswith("nanokvm_rest/panel/device/")
-        )
-        result = ha_ws_call(payload, timeout=30.0 if long_running else 15.0)
+        result = ha_ws_call(payload, timeout=30.0 if command_type.endswith("/device") else 15.0)
         return jsonify({"ok": True, "result": result})
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
