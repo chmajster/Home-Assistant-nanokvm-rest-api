@@ -113,12 +113,16 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         await client.async_login()
 
+        # Persist the protocol/origin that actually worked. This avoids probing
+        # both schemes again after every Home Assistant restart.
         data[CONF_BASE_URL] = client.base_url
 
         info = await client.async_get_info()
         try:
             hostname = await client.async_get_hostname()
         except (NanoKVMAPIError, NanoKVMPermissionError) as err:
+            # Hostname is cosmetic and older firmware/restricted accounts may
+            # not expose the endpoint.
             _LOGGER.debug("NanoKVM hostname unavailable during setup: %s", err)
             hostname = {}
 
