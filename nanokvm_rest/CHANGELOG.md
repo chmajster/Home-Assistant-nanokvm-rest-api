@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.10
+
+- Makes `info` the only mandatory identity endpoint during coordinator refresh; missing `hardware`, `gpio` or `hostname` endpoints now degrade individual capabilities instead of taking the whole integration offline.
+- Adds explicit capability flags for hardware, GPIO and hostname availability.
+- Strengthens the connection test by requiring a NanoKVM-shaped API response from the read-only `/api/vm/info` endpoint instead of accepting any HTTP response.
+- Detects TLS certificate validation failures separately and exposes an actionable `ssl_error` in the Home Assistant config flow.
+- Distinguishes missing account permissions with `permission_denied` instead of reporting a generic connection failure.
+- Adds detailed setup logging for URL, network, authentication, permission and API failures without logging credentials.
+- Warns when firmware does not return `deviceKey` and the integration has to use the URL as its unique ID, because an IP/hostname change may otherwise create a duplicate entry.
+- Adds English and Polish setup diagnostics for TLS, permissions, VLAN/firewall reachability and invalid credentials.
+- Adds repository contract tests and CI validation for Python syntax, version alignment and byte-identical HACS/bundled integration trees.
+- Aligns integration, bundled integration, add-on and container version at `0.11.10`.
+
 ## 0.10.1
 
 - Silences normal `s6-overlay` service start/stop lifecycle output for the one-shot Home Assistant installer by setting `S6_VERBOSITY=0`.
