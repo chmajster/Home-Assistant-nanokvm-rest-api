@@ -29,6 +29,7 @@ from .const import (
     MIN_FORCE_OFF_MS,
     MIN_SCAN_INTERVAL,
 )
+from .device_setup import async_probe_connection
 
 
 def normalize_base_url(value: str) -> str:
@@ -74,6 +75,12 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialize staged setup state."""
+        self._pending_data: dict[str, Any] | None = None
+        self._pending_title = ""
+        self._pending_device_key = ""
+
     async def _async_validate(
         self, data: dict[str, Any]
     ) -> tuple[str, str]:
@@ -113,13 +120,57 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle user initiated setup."""
+        """Test reachability before asking for credentials."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
-                data = dict(user_input)
-                data[CONF_BASE_URL] = normalize_base_url(data[CONF_BASE_URL])
+                base_url = normalize_base_url(user_input[CONF_BASE_URL])
+                verify_ssl = bool(user_input.get(CONF_VERIFY_SSL, True))
+                probe = await async_probe_connection(
+                    self.hass,
+                    base_url,
+                    verify_ssl,
+                )
+            except ValueError:
+                errors["base"] = "invalid_url"
+            except NanoKVMError:
+                errors["base"] = "cannot_connect"
+            else:
+                self._pending_data = {
+                    CONF_BASE_URL: str(probe["base_url"]),
+                    CONF_VERIFY_SSL: verify_ssl,
+                }
+                return await self.async_step_auth()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_BASE_URL): str,
+                    vol.Required(CONF_VERIFY_SSL, default=True): bool,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_auth(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Test NanoKVM authentication without creating the entry yet."""
+        if self._pending_data is None:
+            return self.async_abort(reason="setup_restart")
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data = dict(self._pending_data)
+            data.update(
+                {
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
+                }
+            )
+            try:
                 device_key, title = await self._async_validate(data)
             except ValueError:
                 errors["base"] = "invalid_url"
@@ -130,17 +181,47 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(device_key)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=title, data=data)
+                self._pending_data = data
+                self._pending_title = title
+                self._pending_device_key = device_key
+                return await self.async_step_confirm()
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_BASE_URL): str,
-                vol.Required(CONF_USERNAME, default="admin"): str,
-                vol.Required(CONF_PASSWORD): str,
-                vol.Required(CONF_VERIFY_SSL, default=True): bool,
-            }
+        return self.async_show_form(
+            step_id="auth",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME, default="admin"): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "base_url": str(self._pending_data[CONF_BASE_URL]),
+            },
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Create the config entry only after explicit confirmation."""
+        if self._pending_data is None or not self._pending_title:
+            return self.async_abort(reason="setup_restart")
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._pending_title,
+                data=self._pending_data,
+            )
+
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "title": self._pending_title,
+                "base_url": str(self._pending_data[CONF_BASE_URL]),
+                "device_key": self._pending_device_key,
+            },
+        )
 
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
@@ -252,7 +333,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> NanoKVMOptionsFlow:
-        """Return the NanoKVM options flow."""
+        """Return the options flow."""
         return NanoKVMOptionsFlow()
 
 
