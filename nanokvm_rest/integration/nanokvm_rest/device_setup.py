@@ -207,11 +207,25 @@ async def websocket_create_device(
         connection.send_error(msg["id"], "invalid_url", "Invalid NanoKVM URL")
         return
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": "user"},
-        data=data,
-    )
+    manager = hass.config_entries.flow
+    result = await manager.async_init(DOMAIN, context={"source": "user"})
+    result_type = getattr(result.get("type"), "value", result.get("type"))
+
+    if result_type == "abort":
+        reason = str(result.get("reason") or "setup_aborted")
+        connection.send_error(msg["id"], reason, reason.replace("_", " "))
+        return
+
+    flow_id = result.get("flow_id")
+    if result_type != "form" or not flow_id:
+        connection.send_error(
+            msg["id"],
+            "setup_failed",
+            "NanoKVM config flow did not open the user form",
+        )
+        return
+
+    result = await manager.async_configure(flow_id, user_input=data)
     result_type = getattr(result.get("type"), "value", result.get("type"))
 
     if result_type == "create_entry":
@@ -231,10 +245,7 @@ async def websocket_create_device(
         connection.send_error(msg["id"], reason, reason.replace("_", " "))
         return
 
-    flow_id = result.get("flow_id")
-    if flow_id:
-        await hass.config_entries.flow.async_abort(flow_id)
-
+    manager.async_abort(flow_id)
     errors = result.get("errors") or {}
     reason = str(next(iter(errors.values()), "setup_failed"))
     connection.send_error(msg["id"], reason, reason.replace("_", " "))
