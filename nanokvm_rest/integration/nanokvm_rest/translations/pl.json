@@ -3,16 +3,26 @@
     "step": {
       "user": {
         "title": "Połącz z NanoKVM",
-        "description": "Połączenie lokalne z NanoKVM przez REST API.",
+        "description": "Krok 1 z 3: test połączenia sieciowego i HTTP/HTTPS. W tym kroku dane logowania nie są wysyłane.",
         "data": {
           "base_url": "Adres NanoKVM",
-          "username": "Nazwa użytkownika",
-          "password": "Hasło",
           "verify_ssl": "Weryfikuj certyfikat TLS"
         },
         "data_description": {
           "base_url": "Np. 192.168.1.50 lub nanokvm.local. Można również podać pełny adres HTTP lub HTTPS."
         }
+      },
+      "auth": {
+        "title": "Uwierzytelnij NanoKVM",
+        "description": "Krok 2 z 3: połączenie z {base_url} działa. Teraz sprawdź login i hasło NanoKVM.",
+        "data": {
+          "username": "Nazwa użytkownika",
+          "password": "Hasło"
+        }
+      },
+      "confirm": {
+        "title": "Dodaj NanoKVM",
+        "description": "Krok 3 z 3: uwierzytelnienie działa. Dodaj {title} ({device_key}) pod adresem {base_url} do Home Assistant."
       },
       "reauth_confirm": {
         "title": "Ponowne uwierzytelnienie NanoKVM",
@@ -42,6 +52,7 @@
       "already_configured": "To urządzenie NanoKVM jest już skonfigurowane.",
       "reauth_successful": "Dane logowania NanoKVM zostały zaktualizowane.",
       "reconfigure_successful": "Konfiguracja NanoKVM została zaktualizowana.",
+      "setup_restart": "Sesja dodawania urządzenia wygasła lub jest nieprawidłowa. Rozpocznij konfigurację ponownie.",
       "wrong_device": "Podane ustawienia wskazują na inne urządzenie NanoKVM."
     }
   },
