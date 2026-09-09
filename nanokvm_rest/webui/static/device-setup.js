@@ -17,6 +17,7 @@
   let connectionOk = false;
   let authOk = false;
   let busy = false;
+  let setupId = '';
 
   const step = (name) => document.querySelector(`[data-setup-step="${name}"]`);
 
@@ -31,60 +32,29 @@
 
   function setBusy(value) {
     busy = value;
-    connectionButton.disabled = busy;
-    authButton.disabled = busy || !connectionOk;
+    connectionButton.disabled = busy || authOk;
+    authButton.disabled = busy || !connectionOk || authOk;
     createButton.disabled = busy || !authOk;
     closeButton.disabled = busy;
   }
 
-  function resetAuth() {
-    authOk = false;
-    setStep('auth', 'pending', 'Najpierw wykonaj test połączenia, potem sprawdź login i hasło.');
-    setStep('create', 'pending', 'Urządzenie zostanie dodane dopiero po poprawnej autentykacji.');
-    identity.textContent = '';
-    authButton.disabled = busy || !connectionOk;
-    createButton.disabled = true;
-  }
-
-  function resetConnection() {
-    connectionOk = false;
-    setStep('connection', 'pending', 'Sprawdzimy, czy host odpowiada po HTTP lub HTTPS. Dane logowania nie są wysyłane.');
-    resetAuth();
-  }
-
-  function resetForm() {
-    form.reset();
-    usernameInput.value = 'admin';
-    verifyInput.checked = true;
-    passwordInput.value = '';
-    resetConnection();
-    setBusy(false);
-  }
-
-  function credentialsPayload() {
-    return {
-      base_url: urlInput.value.trim(),
-      verify_ssl: verifyInput.checked,
-      username: usernameInput.value.trim(),
-      password: passwordInput.value,
-    };
-  }
-
-  async function rpc(type, payload) {
-    const response = await fetch('api/rpc', {
+  async function jsonPost(url, payload) {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         'X-NanoKVM-Request': '1',
       },
-      body: JSON.stringify({type, ...payload}),
+      body: JSON.stringify(payload || {}),
     });
     const data = await response.json().catch(() => ({ok: false, error: `HTTP ${response.status}`}));
     if (!response.ok || data.ok === false) {
-      throw new Error(data.error || `HTTP ${response.status}`);
+      const error = new Error(data.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
-    return data.result || {};
+    return data;
   }
 
   function globalNotice(message, bad = false) {
@@ -96,6 +66,58 @@
     window.setTimeout(() => notice.classList.add('hidden'), 6000);
   }
 
+  function cancelSetup(id = setupId) {
+    if (!id) return;
+    if (id === setupId) setupId = '';
+    void jsonPost('api/device/setup/cancel', {setup_id: id}).catch(() => {});
+  }
+
+  function unlockFields() {
+    usernameInput.disabled = false;
+    passwordInput.disabled = false;
+    urlInput.disabled = false;
+    verifyInput.disabled = false;
+  }
+
+  function resetAuth({keepFlow = true} = {}) {
+    if (!keepFlow) cancelSetup();
+    authOk = false;
+    identity.textContent = '';
+    setStep(
+      'auth',
+      'pending',
+      connectionOk
+        ? 'Połączenie działa. Teraz sprawdź login i hasło.'
+        : 'Najpierw wykonaj test połączenia, potem sprawdź login i hasło.',
+    );
+    setStep('create', 'pending', 'Urządzenie zostanie dodane dopiero po poprawnej autentykacji.');
+    setBusy(busy);
+  }
+
+  function resetConnection({cancel = true} = {}) {
+    if (cancel) cancelSetup();
+    connectionOk = false;
+    authOk = false;
+    identity.textContent = '';
+    unlockFields();
+    setStep('connection', 'pending', 'Sprawdzimy, czy host odpowiada po HTTP lub HTTPS. Dane logowania nie są wysyłane.');
+    setStep('auth', 'pending', 'Najpierw wykonaj test połączenia, potem sprawdź login i hasło.');
+    setStep('create', 'pending', 'Urządzenie zostanie dodane dopiero po poprawnej autentykacji.');
+    setBusy(busy);
+  }
+
+  function resetForm() {
+    cancelSetup();
+    form.reset();
+    unlockFields();
+    usernameInput.value = 'admin';
+    verifyInput.checked = true;
+    passwordInput.value = '';
+    setupId = '';
+    busy = false;
+    resetConnection({cancel: false});
+  }
+
   openButton.addEventListener('click', () => {
     resetForm();
     dialog.showModal();
@@ -103,21 +125,44 @@
   });
 
   closeButton.addEventListener('click', () => {
-    if (!busy) dialog.close();
+    if (!busy) {
+      cancelSetup();
+      dialog.close();
+    }
   });
 
   dialog.addEventListener('close', () => {
+    cancelSetup();
     passwordInput.value = '';
+    unlockFields();
   });
 
   dialog.addEventListener('cancel', (event) => {
-    if (busy) event.preventDefault();
+    if (busy) {
+      event.preventDefault();
+      return;
+    }
+    cancelSetup();
   });
 
-  urlInput.addEventListener('input', resetConnection);
-  verifyInput.addEventListener('change', resetConnection);
-  usernameInput.addEventListener('input', resetAuth);
-  passwordInput.addEventListener('input', resetAuth);
+  urlInput.addEventListener('input', () => resetConnection());
+  verifyInput.addEventListener('change', () => resetConnection());
+
+  usernameInput.addEventListener('input', () => {
+    if (authOk) {
+      resetConnection();
+      return;
+    }
+    resetAuth({keepFlow: true});
+  });
+
+  passwordInput.addEventListener('input', () => {
+    if (authOk) {
+      resetConnection();
+      return;
+    }
+    resetAuth({keepFlow: true});
+  });
 
   connectionButton.addEventListener('click', async () => {
     const baseUrl = urlInput.value.trim();
@@ -127,23 +172,27 @@
       return;
     }
 
-    resetConnection();
+    cancelSetup();
+    connectionOk = false;
+    authOk = false;
+    identity.textContent = '';
     setStep('connection', 'working', 'Testuję połączenie z urządzeniem…');
+    setStep('auth', 'pending', 'Oczekiwanie na poprawny test połączenia.');
+    setStep('create', 'pending', 'Urządzenie zostanie dodane dopiero po poprawnej autentykacji.');
     setBusy(true);
     try {
-      const result = await rpc('nanokvm_rest/panel/device/test_connection', {
+      const result = await jsonPost('api/device/setup/connection', {
         base_url: baseUrl,
         verify_ssl: verifyInput.checked,
       });
+      setupId = result.setup_id || '';
       if (result.base_url) urlInput.value = result.base_url;
-      connectionOk = true;
-      setStep(
-        'connection',
-        'success',
-        `Połączenie działa: ${result.base_url || baseUrl} · HTTP ${result.http_status ?? 'OK'}.`,
-      );
+      connectionOk = Boolean(setupId);
+      if (!connectionOk) throw new Error('Home Assistant nie zwrócił sesji konfiguracji.');
+      setStep('connection', 'success', `Połączenie działa: ${result.base_url || baseUrl}.`);
       setStep('auth', 'pending', 'Połączenie działa. Teraz sprawdź login i hasło.');
     } catch (error) {
+      setupId = '';
       setStep('connection', 'error', `Test połączenia nieudany: ${error.message}`);
     } finally {
       setBusy(false);
@@ -151,57 +200,67 @@
   });
 
   authButton.addEventListener('click', async () => {
-    if (!connectionOk) return;
+    if (!connectionOk || !setupId) return;
     if (!usernameInput.value.trim() || !passwordInput.value) {
       setStep('auth', 'error', 'Podaj nazwę użytkownika i hasło.');
       return;
     }
 
     authOk = false;
-    createButton.disabled = true;
     setStep('auth', 'working', 'Loguję się do NanoKVM i odczytuję identyfikator urządzenia…');
     setBusy(true);
     try {
-      const result = await rpc('nanokvm_rest/panel/device/test_authentication', credentialsPayload());
-      if (result.base_url) urlInput.value = result.base_url;
+      const result = await jsonPost('api/device/setup/authentication', {
+        setup_id: setupId,
+        username: usernameInput.value.trim(),
+        password: passwordInput.value,
+      });
       identity.textContent = result.title
         ? `Wykryto: ${result.title}${result.device_key ? ` · ${result.device_key}` : ''}`
         : '';
-
-      if (result.already_configured) {
-        setStep('auth', 'success', 'Autentykacja poprawna, ale to urządzenie jest już skonfigurowane w Home Assistant.');
-        setStep('create', 'error', 'Nie można dodać tego samego urządzenia drugi raz.');
-        authOk = false;
-      } else {
-        authOk = true;
-        setStep('auth', 'success', 'Autentykacja poprawna. NanoKVM zaakceptował login i hasło.');
-        setStep('create', 'pending', 'Urządzenie jest gotowe do dodania do Home Assistant.');
-      }
+      if (result.base_url) urlInput.value = result.base_url;
+      authOk = true;
+      passwordInput.value = '';
+      usernameInput.disabled = true;
+      passwordInput.disabled = true;
+      urlInput.disabled = true;
+      verifyInput.disabled = true;
+      setStep('auth', 'success', 'Autentykacja poprawna. NanoKVM zaakceptował login i hasło.');
+      setStep('create', 'pending', 'Urządzenie jest zweryfikowane i gotowe do dodania do Home Assistant.');
     } catch (error) {
+      if (error.status === 409) {
+        setupId = '';
+        connectionOk = false;
+      }
       setStep('auth', 'error', `Test autentykacji nieudany: ${error.message}`);
-      setStep('create', 'pending', 'Popraw dane logowania i ponów test autentykacji.');
+      setStep(
+        'create',
+        'pending',
+        error.status === 409
+          ? 'To urządzenie nie może zostać dodane ponownie.'
+          : 'Popraw dane logowania i ponów test autentykacji.',
+      );
     } finally {
       setBusy(false);
     }
   });
 
   createButton.addEventListener('click', async () => {
-    if (!authOk) return;
-    setStep('create', 'working', 'Dodaję urządzenie przez config flow Home Assistant…');
+    if (!authOk || !setupId) return;
+    setStep('create', 'working', 'Dodaję zweryfikowane urządzenie przez config flow Home Assistant…');
     setBusy(true);
     try {
-      const result = await rpc('nanokvm_rest/panel/device/create', credentialsPayload());
+      const result = await jsonPost('api/device/setup/create', {setup_id: setupId});
+      setupId = '';
       setStep('create', 'success', `Dodano urządzenie ${result.title || 'NanoKVM'}.`);
-      passwordInput.value = '';
       globalNotice(`Dodano urządzenie ${result.title || 'NanoKVM'}.`);
       window.setTimeout(() => {
         dialog.close();
-        document.getElementById('refresh')?.click();
+        window.location.reload();
       }, 700);
     } catch (error) {
       setStep('create', 'error', `Nie udało się dodać urządzenia: ${error.message}`);
       globalNotice(error.message, true);
-    } finally {
       setBusy(false);
     }
   });
