@@ -59,7 +59,9 @@ jobs:
             node --check "$file"
           done
           python -m py_compile nanokvm_rest/webui/app.py
-          node --check nanokvm_rest/webui/static/app.js
+          for file in nanokvm_rest/webui/static/*.js; do
+            node --check "$file"
+          done
           bash -n nanokvm_rest/run.sh
           test -s nanokvm_rest/icon.png
           test -s nanokvm_rest/logo.png
