@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#08111f">
   <title>NanoKVM Manager</title>
   <link rel="stylesheet" href="static/style.css?v={{ version }}">
+  <link rel="stylesheet" href="static/device-setup.css?v={{ version }}">
 </head>
 <body>
   <div class="shell">
@@ -34,6 +35,7 @@
           <p id="page-subtitle">Centrum zdalnego zarządzania NanoKVM</p>
         </div>
         <div class="top-actions">
+          <button class="btn" id="add-device">Dodaj urządzenie</button>
           <button class="btn ghost" id="open-live">Live KVM</button>
           <button class="btn primary" id="refresh">Odśwież</button>
         </div>
@@ -54,6 +56,74 @@
     <button data-view="hid"><span>HID</span></button>
   </nav>
 
+  <dialog id="device-setup-dialog" class="device-setup-dialog">
+    <div class="device-setup-card">
+      <div class="device-setup-head">
+        <div>
+          <h2>Dodaj NanoKVM</h2>
+          <p class="muted">Najpierw sprawdź połączenie, następnie uwierzytelnienie, a dopiero potem dodaj urządzenie.</p>
+        </div>
+        <button class="btn small ghost" id="device-setup-close" type="button">Zamknij</button>
+      </div>
+
+      <form id="device-setup-form" class="device-setup-form" autocomplete="off" onsubmit="return false;">
+        <div class="field">
+          <label for="device-url">Adres NanoKVM</label>
+          <input id="device-url" type="text" placeholder="192.168.1.50 lub https://nanokvm.local" spellcheck="false" required>
+        </div>
+
+        <label class="device-setup-checkbox">
+          <input id="device-verify-ssl" type="checkbox" checked>
+          <span>Weryfikuj certyfikat SSL</span>
+        </label>
+
+        <div class="device-setup-grid">
+          <div class="field">
+            <label for="device-username">Użytkownik</label>
+            <input id="device-username" type="text" value="admin" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="device-password">Hasło</label>
+            <input id="device-password" type="password" autocomplete="current-password" required>
+          </div>
+        </div>
+
+        <div class="device-setup-steps">
+          <div class="setup-step pending" data-setup-step="connection">
+            <span class="setup-step-number">1</span>
+            <div>
+              <strong>Test połączenia</strong>
+              <div class="setup-step-text">Sprawdzimy, czy host odpowiada po HTTP lub HTTPS. Dane logowania nie są wysyłane.</div>
+            </div>
+          </div>
+          <div class="setup-step pending" data-setup-step="auth">
+            <span class="setup-step-number">2</span>
+            <div>
+              <strong>Test autentykacji</strong>
+              <div class="setup-step-text">Najpierw wykonaj test połączenia, potem sprawdź login i hasło.</div>
+            </div>
+          </div>
+          <div class="setup-step pending" data-setup-step="create">
+            <span class="setup-step-number">3</span>
+            <div>
+              <strong>Dodanie do Home Assistant</strong>
+              <div class="setup-step-text">Urządzenie zostanie dodane dopiero po poprawnej autentykacji.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="device-identity" class="device-identity"></div>
+
+        <div class="device-setup-actions">
+          <button class="btn" id="device-test-connection" type="button">1. Test połączenia</button>
+          <button class="btn" id="device-test-auth" type="button" disabled>2. Test autentykacji</button>
+          <button class="btn primary" id="device-create" type="button" disabled>3. Dodaj urządzenie</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
   <script src="static/app.js?v={{ version }}"></script>
+  <script src="static/device-setup.js?v={{ version }}"></script>
 </body>
 </html>
