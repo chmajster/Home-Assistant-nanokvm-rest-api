@@ -143,12 +143,31 @@ class NanoKVMCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         previous_data = self.data
         try:
-            info, hardware, gpio, hostname = await asyncio.gather(
-                self.client.async_get_info(),
-                self.client.async_get_hardware(),
-                self.client.async_get_gpio(),
-                self.client.async_get_hostname(),
+            # Device identity is the only endpoint required for a usable entry.
+            # Older firmware and restricted accounts may not expose every VM
+            # endpoint, so those capabilities degrade independently instead of
+            # making the complete integration unavailable.
+            info = await self.client.async_get_info()
+            hardware_raw, gpio_raw, hostname_raw = await asyncio.gather(
+                self._async_optional(
+                    self.client.async_get_hardware(),
+                    "hardware",
+                    tolerate_api_errors=True,
+                ),
+                self._async_optional(
+                    self.client.async_get_gpio(),
+                    "gpio",
+                    tolerate_api_errors=True,
+                ),
+                self._async_optional(
+                    self.client.async_get_hostname(),
+                    "hostname",
+                    tolerate_api_errors=True,
+                ),
             )
+            hardware = hardware_raw or {}
+            gpio = gpio_raw or {}
+            hostname = hostname_raw or {}
 
             account, web_title = await asyncio.gather(
                 self._async_optional(self.client.async_get_account(), "account"),
@@ -241,6 +260,9 @@ class NanoKVMCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "capabilities": {
                 "admin": is_admin,
                 "pcie": is_pcie,
+                "hardware": hardware_raw is not None,
+                "gpio": gpio_raw is not None,
+                "hostname": hostname_raw is not None,
             },
         }
         self._emit_state_change_events(previous_data, data)
