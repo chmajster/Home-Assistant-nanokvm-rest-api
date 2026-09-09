@@ -35,15 +35,15 @@ from .device_setup import async_probe_connection
 def normalize_base_url(value: str) -> str:
     """Normalize and validate a NanoKVM origin.
 
-    When no scheme is supplied, prefer HTTPS. The client will automatically
-    fall back to HTTP if NanoKVM does not serve HTTPS.
+    When no scheme is supplied, prefer HTTP because NanoKVM defaults to HTTP.
+    The client will automatically fall back to HTTPS when needed.
     """
     value = value.strip()
     if not value:
         raise ValueError("invalid URL")
 
     if "://" not in value:
-        value = f"https://{value}"
+        value = f"http://{value}"
 
     parsed = urlparse(value)
     scheme = parsed.scheme.casefold()
