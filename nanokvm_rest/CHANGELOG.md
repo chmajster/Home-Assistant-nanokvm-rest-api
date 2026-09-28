@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.14
+
+- Adds embedded **Live KVM** to NanoKVM Manager using the existing authenticated Home Assistant H.264/HID bridge, without exposing NanoKVM credentials to the browser.
+- Adds per-device Live KVM shortcuts, device selection, fullscreen/landscape modes, scaling, keyboard, mouse, touch, Ctrl+Alt+Del and HID text paste.
+- Adds a persistent **Kafelki / Lista** switch for the NanoKVM fleet on Dashboard and Urządzenia views.
+- Keeps Live KVM polling isolated from the 30-second fleet refresh so an active console is not interrupted.
+- Aligns integration, bundled integration, app/add-on and container version at `0.11.14`.
+
+
 ## 0.11.12
 
 - Fixes the staged connection test for NanoKVM devices that correctly answer the protected `/api/vm/info` endpoint with HTTP 401/403 before login. These responses now mean the device is reachable instead of being misreported as a network failure.
