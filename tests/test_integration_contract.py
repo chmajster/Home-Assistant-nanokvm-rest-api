@@ -66,11 +66,24 @@ class IntegrationContractTests(unittest.TestCase):
             payload = json.loads((HACS / relative).read_text(encoding="utf-8"))
             self.assertTrue(required.issubset(payload["config"]["error"]), relative)
 
-    def test_connection_probe_requires_nanokvm_fingerprint(self) -> None:
+    def test_connection_probe_supports_auth_gated_nanokvm(self) -> None:
         source = (HACS / "device_setup.py").read_text(encoding="utf-8")
         self.assertIn('/api/vm/info', source)
         self.assertIn('_looks_like_nanokvm_response', source)
+        self.assertIn('_AUTH_GATE_STATUSES = {401, 403}', source)
+        self.assertIn('response.status in _AUTH_GATE_STATUSES', source)
         self.assertIn('ssl_error', source)
+
+    def test_legacy_auth_and_account_compatibility_are_preserved(self) -> None:
+        client = (HACS / "client.py").read_text(encoding="utf-8")
+        coordinator = (HACS / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('legacy_token = response_data.get("token")', client)
+        self.assertIn('legacy_single_account', coordinator)
+        self.assertIn('is_admin = role == "admin" or legacy_single_account', coordinator)
+
+    def test_legacy_single_ip_field_is_supported(self) -> None:
+        source = (HACS / "sensor.py").read_text(encoding="utf-8")
+        self.assertIn('legacy_ip = info.get("ip")', source)
 
     def test_optional_core_endpoints_do_not_gate_identity(self) -> None:
         source = (HACS / "coordinator.py").read_text(encoding="utf-8")
