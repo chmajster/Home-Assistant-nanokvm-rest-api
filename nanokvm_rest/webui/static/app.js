@@ -1,7 +1,7 @@
-import { RemoteConsoleController } from './remote-console-controller.js?v=1';
-
 (() => {
-  const savedLayout = localStorage.getItem('nanokvm-manager-device-layout');
+  const storage = window.localStorage || {getItem: () => null, setItem: () => {}};
+  const RemoteConsoleController = window.RemoteConsoleController;
+  const savedLayout = storage.getItem('nanokvm-manager-device-layout');
   const state = {
     view: 'overview',
     devices: [],
@@ -343,7 +343,7 @@ import { RemoteConsoleController } from './remote-console-controller.js?v=1';
     document.querySelectorAll('[data-layout]').forEach(btn => btn.addEventListener('click', () => {
       const layout = btn.dataset.layout === 'list' ? 'list' : 'grid';
       state.layout = layout;
-      localStorage.setItem('nanokvm-manager-device-layout', layout);
+      storage.setItem('nanokvm-manager-device-layout', layout);
       render();
     }));
     document.querySelectorAll('[data-live-entry]').forEach(btn => btn.addEventListener('click', () => {
@@ -392,7 +392,7 @@ import { RemoteConsoleController } from './remote-console-controller.js?v=1';
   document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => { state.view=btn.dataset.view; render(); }));
   document.getElementById('refresh').addEventListener('click', () => load(true));
   document.getElementById('open-live').addEventListener('click', () => { state.view='live'; render(); });
-  window.addEventListener('beforeunload', () => consoleController?.stop());
+  window.addEventListener?.('beforeunload', () => consoleController?.stop());
   load(true);
   setInterval(() => { if (!['media','hid','live'].includes(state.view)) load(false); }, 30000);
 })();
