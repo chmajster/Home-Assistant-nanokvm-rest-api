@@ -13,7 +13,7 @@ from typing import Any, Callable, TypeVar, cast
 import websocket
 from flask import Flask, Response, abort, jsonify, render_template, request
 
-APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.0")
+APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.13")
 HA_WS_URL = os.environ.get("HA_WS_URL", "ws://supervisor/core/websocket")
 HA_API_URL = os.environ.get("HA_API_URL", "http://supervisor/core/api").rstrip("/")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -60,7 +60,11 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 class HAError(RuntimeError):
-    pass
+    """Home Assistant failure with an optional WebSocket error code."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _recv_json(ws: websocket.WebSocket, timeout: float) -> dict[str, Any]:
@@ -105,7 +109,10 @@ def ha_ws_call(message: dict[str, Any], *, timeout: float = 15.0) -> Any:
                 continue
             if response.get("success") is not True:
                 error = response.get("error") or {}
-                raise HAError(str(error.get("message") or error.get("code") or "Home Assistant command failed"))
+                raise HAError(
+                    str(error.get("message") or error.get("code") or "Home Assistant command failed"),
+                    code=error.get("code"),
+                )
             return response.get("result")
         raise HAError("Home Assistant command timed out")
     except (OSError, websocket.WebSocketException, json.JSONDecodeError) as err:
@@ -250,7 +257,7 @@ def _abort_flow_safely(flow_id: str) -> None:
 
 def _commands_not_registered(err: HAError) -> bool:
     text = str(err).casefold()
-    return "unknown command" in text or "not found" in text
+    return err.code == "unknown_command" or "unknown command" in text
 
 
 @app.after_request
@@ -274,25 +281,96 @@ def index() -> str:
     return render_template("index.html", version=APP_VERSION)
 
 
+def _configured_inventory() -> dict[str, Any]:
+    """Read saved entries using HA Core when the NanoKVM backend is unavailable.
+
+    Only public identity/state fields are forwarded, never config entry data,
+    credentials or options. These rows do not claim live device availability.
+    """
+    entries = ha_ws_call({"type": "config_entries/get", "domain": "nanokvm_rest"})
+    if not isinstance(entries, list):
+        raise HAError("Home Assistant returned an invalid config entry list")
+    devices = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise HAError("Home Assistant returned an invalid config entry")
+        if entry.get("domain") != "nanokvm_rest" or entry.get("source") == "ignore":
+            continue
+        if not entry.get("entry_id"):
+            raise HAError("Home Assistant returned a config entry without an ID")
+        devices.append({
+            "entry_id": str(entry["entry_id"]),
+            "title": str(entry.get("title") or "NanoKVM"),
+            "integration_state": str(entry.get("state") or "not_loaded"),
+            "loaded": entry.get("state") == "loaded",
+            "backend_available": False,
+            "available": False,
+            "admin": False,
+            "base_url": "",
+            "power": None,
+            "hdmi_signal": None,
+            "health": {"score": None, "state": "warning", "issues": ["backend_unavailable"]},
+        })
+    devices.sort(key=lambda item: item["title"].casefold())
+    return {"devices": devices, "groups": [], "tags": []}
+
+
+def _inventory_response(result: Any) -> dict[str, Any]:
+    """Reject malformed results instead of treating them as an empty inventory."""
+    if not isinstance(result, dict) or not isinstance(result.get("devices"), list):
+        raise HAError("NanoKVM returned an invalid device list")
+    if any(not isinstance(item, dict) or not item.get("entry_id") for item in result["devices"]):
+        raise HAError("NanoKVM returned an invalid device entry")
+    return result
+
+
 @app.get("/api/bootstrap")
 @require_admin
-def api_bootstrap() -> Response:
+def api_bootstrap() -> tuple[Response, int] | Response:
+    """Keep saved devices visible when live or optional services are unavailable."""
+    warnings: list[str] = []
+    backend_ready = True
     try:
-        devices = ha_ws_call({"type": "nanokvm_rest/panel/list"})
-        operations = ha_ws_call({"type": "nanokvm_rest/panel/ops/list"})
-        updates = ha_ws_call({"type": "nanokvm_rest/panel/update/list"})
-        return jsonify({"ok": True, "devices": devices, "operations": operations, "updates": updates})
-    except HAError as err:
-        if _commands_not_registered(err):
-            return jsonify(
-                {
-                    "ok": True,
-                    "devices": {"devices": [], "groups": [], "tags": []},
-                    "operations": {"summary": {}, "devices": [], "alerts": []},
-                    "updates": {"devices": []},
-                }
+        try:
+            devices = _inventory_response(ha_ws_call({"type": "nanokvm_rest/panel/list"}))
+        except HAError as err:
+            if not _commands_not_registered(err):
+                raise
+            devices = _configured_inventory()
+            backend_ready = False
+            warnings.append(
+                "Backend NanoKVM REST nie jest dostępny. Wyświetlono konfiguracje zapisane w Home Assistant, "
+                "bez stanu na żywo. Po aktualizacji dodatku uruchom ponownie Home Assistant Core. "
+                "Sprawdź stan integracji NanoKVM REST w Ustawienia → Urządzenia i usługi."
             )
+    except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
+
+    sections: dict[str, Any] = {
+        "operations": {"summary": {}, "devices": [], "alerts": []},
+        "updates": {"devices": []},
+    }
+    if backend_ready:
+        for key, command, label in (
+            ("operations", "nanokvm_rest/panel/ops/list", "Operations"),
+            ("updates", "nanokvm_rest/panel/update/list", "Update Center"),
+        ):
+            try:
+                result = ha_ws_call({"type": command})
+                if not isinstance(result, dict) or not isinstance(result.get("devices"), list):
+                    raise HAError("Home Assistant returned an invalid module response")
+                sections[key] = result
+            except HAError as err:
+                # Optional modules must never discard a successfully loaded inventory.
+                warnings.append(f"{label}: {err}. Lista urządzeń pozostaje dostępna.")
+                app.logger.warning("NanoKVM Manager %s unavailable: %s", key, err)
+    return jsonify({
+        "ok": True,
+        "devices": devices,
+        **sections,
+        "backend_ready": backend_ready,
+        "warnings": warnings,
+    })
 
 
 @app.post("/api/device/setup/connection")

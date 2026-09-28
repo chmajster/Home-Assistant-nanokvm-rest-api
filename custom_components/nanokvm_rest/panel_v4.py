@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom, websocket_api
@@ -24,16 +25,17 @@ PANEL_URL = base.PANEL_URL
 STATIC_URL = base.STATIC_URL
 PANEL_ELEMENT = "nanokvm-remote-server-panel-v6"
 DATA_PANEL_BACKEND_REGISTERED = f"{DOMAIN}_remote_panel_backend_registered"
+DATA_PANEL_BACKEND_LOCK = f"{DOMAIN}_remote_panel_backend_lock"
 DATA_PANEL_VISIBLE_ENTRIES = f"{DOMAIN}_remote_panel_visible_entries"
 
 
-async def async_setup_remote_panel(
-    hass: HomeAssistant,
-    entry_id: str,
-    show_sidebar: bool = True,
-) -> None:
-    """Set up Remote Server backend and synchronize sidebar visibility."""
-    if not hass.data.get(DATA_PANEL_BACKEND_REGISTERED):
+async def async_setup_panel_backend(hass: HomeAssistant) -> None:
+    """Register Manager APIs without waiting for any device to come online."""
+    lock = hass.data.setdefault(DATA_PANEL_BACKEND_LOCK, asyncio.Lock())
+    async with lock:
+        if hass.data.get(DATA_PANEL_BACKEND_REGISTERED):
+            return
+
         store = base.RemoteServerStore(hass)
         await store.async_load()
         hass.data[base.DATA_REMOTE_STORE] = store
@@ -71,6 +73,15 @@ async def async_setup_remote_panel(
             [StaticPathConfig(STATIC_URL, frontend_path, cache_headers=False)]
         )
         hass.data[DATA_PANEL_BACKEND_REGISTERED] = True
+
+
+async def async_setup_remote_panel(
+    hass: HomeAssistant,
+    entry_id: str,
+    show_sidebar: bool = True,
+) -> None:
+    """Set up Remote Server backend and synchronize sidebar visibility."""
+    await async_setup_panel_backend(hass)
 
     visible_entries: set[str] = hass.data.setdefault(DATA_PANEL_VISIBLE_ENTRIES, set())
     if show_sidebar:

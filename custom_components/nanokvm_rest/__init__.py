@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .client import NanoKVMClient
 from .const import (
@@ -18,10 +19,20 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import NanoKVMCoordinator
-from .panel_v4 import async_setup_remote_panel, async_unload_remote_panel
+from .panel_v4 import (
+    async_setup_panel_backend,
+    async_setup_remote_panel,
+    async_unload_remote_panel,
+)
 
 
 type NanoKVMConfigEntry = ConfigEntry[NanoKVMCoordinator]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Expose Manager inventory even if every config entry fails to start."""
+    await async_setup_panel_backend(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: NanoKVMConfigEntry) -> bool:

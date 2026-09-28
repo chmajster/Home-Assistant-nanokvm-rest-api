@@ -1,9 +1,13 @@
 (() => {
-  const state = { view: 'overview', devices: [], operations: {}, updates: {}, selected: '' };
+  const state = { view: 'overview', devices: [], operations: {}, updates: {}, selected: '', warnings: [] };
   const content = document.getElementById('content');
   const notice = document.getElementById('notice');
   const title = document.getElementById('page-title');
   const subtitle = document.getElementById('page-subtitle');
+  const diagnostics = document.createElement('div');
+  diagnostics.id = 'integration-diagnostics';
+  diagnostics.setAttribute('role', 'status');
+  content.before(diagnostics);
 
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const yes = (v) => v === true ? 'Tak' : v === false ? 'Nie' : '—';
@@ -40,12 +44,16 @@
     if (show) content.innerHTML = '<div class="loading">Ładowanie danych z Home Assistant…</div>';
     try {
       const data = await jsonFetch('api/bootstrap');
-      state.devices = data.devices?.devices || [];
+      if (!Array.isArray(data.devices?.devices)) throw new Error('Nieprawidłowa lista urządzeń z integracji.');
+      state.devices = data.devices.devices;
+      state.warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      diagnostics.innerHTML = state.warnings.map(message => `<div class="card"><h3>Ograniczona dostępność integracji</h3><p>${esc(message)}</p></div>`).join('');
       state.operations = data.operations || {};
       state.updates = data.updates || {};
-      if (!state.selected && state.devices[0]) state.selected = state.devices[0].entry_id;
+      if (!state.devices.some(d => d.entry_id === state.selected)) state.selected = state.devices[0]?.entry_id || '';
       render();
     } catch (e) {
+      diagnostics.innerHTML = '';
       content.innerHTML = `<div class="card"><h2>Nie udało się połączyć z integracją</h2><p>${esc(e.message)}</p><p>Sprawdź, czy NanoKVM REST jest zainstalowane, skonfigurowane i Home Assistant został zrestartowany po aktualizacji.</p></div>`;
       showNotice(e.message, true);
     }
@@ -66,8 +74,13 @@
   }
 
   function deviceCard(d) {
+    const unavailable = d.loaded === false || d.backend_available === false;
+    const badge = d.backend_available === false
+      ? '<span class="badge warn">Brak danych z integracji</span>'
+      : d.loaded === false ? '<span class="badge warn">Konfiguracja zapisana</span>' : statusBadge(d.available);
     return `<article class="card device-card">
-      <div class="device-head"><div><h3>${esc(d.hostname || d.title)}</h3><div class="muted">${esc(d.base_url || '')}</div></div>${statusBadge(d.available)}</div>
+      <div class="device-head"><div><h3>${esc(d.hostname || d.title)}</h3><div class="muted">${esc(d.base_url || '')}</div></div>${badge}</div>
+      ${unavailable ? '<p class="muted">Urządzenie jest skonfigurowane, ale sterowanie nie jest jeszcze dostępne. Sprawdź stan integracji NanoKVM REST w Home Assistant.</p>' : ''}
       <div class="actions">${healthBadge(d.health)}${d.favorite ? '<span class="badge warn">★ Favorite</span>' : ''}${d.group ? `<span class="badge">${esc(d.group)}</span>` : ''}</div>
       <div class="facts">
         <div class="fact"><span>Host</span><strong>${d.power === true ? 'ON' : d.power === false ? 'OFF' : '—'}</strong></div>
@@ -76,10 +89,10 @@
         <div class="fact"><span>App</span><strong>${esc(d.application_version || '—')}</strong></div>
       </div>
       <div class="actions">
-        <button class="btn small" data-action="power_on" data-entry="${esc(d.entry_id)}">Power On</button>
-        <button class="btn small" data-action="power_press" data-entry="${esc(d.entry_id)}">Power</button>
-        <button class="btn small danger" data-action="reset" data-entry="${esc(d.entry_id)}">Reset</button>
-        ${d.admin ? `<button class="btn small" data-action="reset_hid" data-entry="${esc(d.entry_id)}">HID Reset</button>` : ''}
+        <button class="btn small" data-action="power_on" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power On</button>
+        <button class="btn small" data-action="power_press" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power</button>
+        <button class="btn small danger" data-action="reset" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Reset</button>
+        ${d.admin ? `<button class="btn small" data-action="reset_hid" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>HID Reset</button>` : ''}
       </div>
     </article>`;
   }
@@ -97,7 +110,7 @@
   }
 
   function renderDevices() {
-    return `<div class="device-grid">${state.devices.map(deviceCard).join('')}</div>`;
+    return `<div class="device-grid">${state.devices.map(deviceCard).join('') || '<div class="card">Brak skonfigurowanych urządzeń. Dodaj NanoKVM w Managerze lub w integracji NanoKVM REST.</div>'}</div>`;
   }
 
   function renderOperations() {
