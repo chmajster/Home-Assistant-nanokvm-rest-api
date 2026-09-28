@@ -23,6 +23,21 @@ SensorDefinition = tuple[
     str | None,
 ]
 
+
+def _ip_address(data: dict[str, Any]) -> str | None:
+    """Return the current or legacy NanoKVM IPv4 field."""
+    info = data.get("info") or {}
+    ips = info.get("ips")
+    if isinstance(ips, list):
+        for item in ips:
+            if isinstance(item, dict) and item.get("addr"):
+                return str(item["addr"])
+
+    # NanoKVM 2.1.x-2.2.x used a single "ip" field.
+    legacy_ip = info.get("ip")
+    return str(legacy_ip) if legacy_ip else None
+
+
 BASE_SENSORS: tuple[SensorDefinition, ...] = (
     (
         "Hostname",
@@ -56,14 +71,7 @@ BASE_SENSORS: tuple[SensorDefinition, ...] = (
         "IP address",
         "ip_address",
         "mdi:ip-network",
-        lambda d: next(
-            (
-                item.get("addr")
-                for item in d.get("info", {}).get("ips", [])
-                if item.get("addr")
-            ),
-            None,
-        ),
+        _ip_address,
         None,
     ),
     (
