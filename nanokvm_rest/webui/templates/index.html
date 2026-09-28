@@ -19,6 +19,7 @@
       <nav>
         <button class="nav active" data-view="overview">Dashboard</button>
         <button class="nav" data-view="devices">Urządzenia</button>
+        <button class="nav" data-view="live">Live KVM</button>
         <button class="nav" data-view="operations">Operations</button>
         <button class="nav" data-view="alerts">Alert Center</button>
         <button class="nav" data-view="updates">Update Center</button>
@@ -49,6 +50,7 @@
   <nav class="mobile-nav" aria-label="Nawigacja NanoKVM Manager">
     <button data-view="overview" class="active"><span>Start</span></button>
     <button data-view="devices"><span>KVM</span></button>
+    <button data-view="live"><span>Live</span></button>
     <button data-view="operations"><span>Ops</span></button>
     <button data-view="alerts"><span>Alerty</span></button>
     <button data-view="updates"><span>Update</span></button>
@@ -123,7 +125,7 @@
     </div>
   </dialog>
 
-  <script src="static/app.js?v={{ version }}"></script>
+  <script type="module" src="static/app.js?v={{ version }}"></script>
   <script src="static/device-setup.js?v={{ version }}"></script>
 </body>
 </html>
