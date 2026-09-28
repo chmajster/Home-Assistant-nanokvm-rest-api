@@ -25,6 +25,17 @@ jobs:
         run: |
           python -m compileall -q custom_components/nanokvm_rest
           python -m compileall -q nanokvm_rest/integration/nanokvm_rest
+          python -m compileall -q nanokvm_rest/webui
 
       - name: Run repository contract tests
         run: python -m unittest discover -s tests -v
+
+      - name: Set up Node.js for Manager UI tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check Manager UI and run regression tests
+        run: |
+          node --check nanokvm_rest/webui/static/app.js
+          node --test tests/test_manager_ui.cjs
