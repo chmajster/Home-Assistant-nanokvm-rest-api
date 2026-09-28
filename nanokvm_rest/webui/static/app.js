@@ -105,6 +105,7 @@ import { RemoteConsoleController } from './remote-console-controller.js?v=1';
         <button class="btn small" data-action="power_press" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power</button>
         <button class="btn small danger" data-action="reset" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Reset</button>
         ${d.admin ? `<button class="btn small" data-action="reset_hid" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>HID Reset</button>` : ''}
+        <button class="btn small primary" data-live-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Live KVM</button>
       </div>
     </article>`;
   }
