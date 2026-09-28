@@ -177,7 +177,18 @@ class NanoKVMCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hardware_version = str(hardware.get("version") or "").upper()
             role = str((account or {}).get("role") or "").lower()
             is_pcie = hardware_version == "PCIE"
-            is_admin = role == "admin"
+
+            # NanoKVM <= 2.5.0 exposes a single privileged account and its
+            # /api/auth/account response contains only "username". Role-based
+            # accounts were added later. Treat a successful role-less legacy
+            # account response as administrator so older devices retain the
+            # management features they historically exposed.
+            legacy_single_account = (
+                isinstance(account, dict)
+                and bool(account.get("username"))
+                and not role
+            )
+            is_admin = role == "admin" or legacy_single_account
 
             hdmi: dict[str, Any] | None = None
             if is_pcie:
