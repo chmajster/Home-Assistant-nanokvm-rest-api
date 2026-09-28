@@ -1,3 +1,5 @@
+const REMOTE_CONSOLE_WORKER_URL = new URL("remote-console-worker.js?v=1", document.currentScript?.src || window.location.href).toString();
+
 const MODIFIERS = {
   ControlLeft: 1, ShiftLeft: 2, AltLeft: 4, MetaLeft: 8,
   ControlRight: 16, ShiftRight: 32, AltRight: 64, MetaRight: 128
@@ -21,7 +23,7 @@ function keycode(code) {
   return SPECIAL[code];
 }
 
-export class RemoteConsoleController {
+class RemoteConsoleController {
   constructor({ hass, entryId, root, requestSession, pasteText, labels = {} }) {
     this.hass = hass;
     this.entryId = entryId;
@@ -57,7 +59,7 @@ export class RemoteConsoleController {
       const session = await this.requestSession();
       const scheme = location.protocol === "https:" ? "wss" : "ws";
       const url = `${scheme}://${location.host}${session.path}`;
-      const worker = new Worker(new URL("./remote-console-worker.js?v=1", import.meta.url), { type: "module" });
+      const worker = new Worker(REMOTE_CONSOLE_WORKER_URL);
       this.worker = worker;
       worker.onmessage = (event) => this._workerMessage(event.data || {});
       const offscreen = this.canvas.transferControlToOffscreen();
@@ -217,3 +219,5 @@ export class RemoteConsoleController {
   async fullscreen() { const shell=this.root.querySelector("#console-shell");if(!shell)return;try{if(document.fullscreenElement)await document.exitFullscreen();else await shell.requestFullscreen();}catch(err){this._setState("error",err?.message||String(err));} }
   async landscape() { const shell=this.root.querySelector("#console-shell");try{if(!document.fullscreenElement&&shell)await shell.requestFullscreen();if(screen.orientation?.lock)await screen.orientation.lock("landscape");}catch(_){this._setState("connected",this.labels.rotateHint||"Rotate device to landscape");} }
 }
+
+window.RemoteConsoleController = RemoteConsoleController;
