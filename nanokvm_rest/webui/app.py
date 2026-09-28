@@ -13,7 +13,7 @@ from typing import Any, Callable, TypeVar, cast
 import websocket
 from flask import Flask, Response, abort, jsonify, render_template, request
 
-APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.13")
+APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.14")
 HA_WS_URL = os.environ.get("HA_WS_URL", "ws://supervisor/core/websocket")
 HA_API_URL = os.environ.get("HA_API_URL", "http://supervisor/core/api").rstrip("/")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -498,6 +498,36 @@ def api_device_setup_cancel() -> Response:
         return jsonify({"ok": True})
     _abort_flow_safely(flow_id)
     return jsonify({"ok": True})
+
+
+@app.post("/api/console/session")
+@require_admin
+def api_console_session() -> tuple[Response, int] | Response:
+    """Issue a short-lived Home Assistant Remote Console session for Manager."""
+    require_write_header()
+    body = request.get_json(silent=True) or {}
+    entry_id = str(body.get("entry_id") or "").strip()
+    if not entry_id:
+        return jsonify({"ok": False, "error": "Wybierz urządzenie NanoKVM."}), 400
+
+    try:
+        result = ha_ws_call(
+            {
+                "type": "nanokvm_rest/panel/console/session",
+                "entry_id": entry_id,
+            },
+            timeout=10.0,
+        )
+        if (
+            not isinstance(result, dict)
+            or not result.get("path")
+            or not result.get("protocol")
+            or not result.get("token")
+        ):
+            raise HAError("NanoKVM REST returned an invalid Remote Console session")
+        return jsonify({"ok": True, **result})
+    except HAError as err:
+        return jsonify({"ok": False, "error": str(err)}), 502
 
 
 @app.post("/api/rpc")

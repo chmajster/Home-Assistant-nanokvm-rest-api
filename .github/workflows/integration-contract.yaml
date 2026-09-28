@@ -38,4 +38,6 @@ jobs:
       - name: Check Manager UI and run regression tests
         run: |
           node --check nanokvm_rest/webui/static/app.js
+          node --check nanokvm_rest/webui/static/remote-console-controller.js
+          node --check nanokvm_rest/webui/static/remote-console-worker.js
           node --test tests/test_manager_ui.cjs

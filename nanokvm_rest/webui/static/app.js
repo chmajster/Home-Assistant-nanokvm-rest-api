@@ -1,5 +1,17 @@
 (() => {
-  const state = { view: 'overview', devices: [], operations: {}, updates: {}, selected: '', warnings: [] };
+  const storage = window.localStorage || {getItem: () => null, setItem: () => {}};
+  const RemoteConsoleController = window.RemoteConsoleController;
+  const savedLayout = storage.getItem('nanokvm-manager-device-layout');
+  const state = {
+    view: 'overview',
+    devices: [],
+    operations: {},
+    updates: {},
+    selected: '',
+    warnings: [],
+    layout: savedLayout === 'list' ? 'list' : 'grid',
+  };
+  let consoleController = null;
   const content = document.getElementById('content');
   const notice = document.getElementById('notice');
   const title = document.getElementById('page-title');
@@ -88,13 +100,56 @@
         <div class="fact"><span>Hardware</span><strong>${esc(d.hardware || '—')}</strong></div>
         <div class="fact"><span>App</span><strong>${esc(d.application_version || '—')}</strong></div>
       </div>
-      <div class="actions">
+      <div class="actions device-actions">
         <button class="btn small" data-action="power_on" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power On</button>
         <button class="btn small" data-action="power_press" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power</button>
         <button class="btn small danger" data-action="reset" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Reset</button>
         ${d.admin ? `<button class="btn small" data-action="reset_hid" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>HID Reset</button>` : ''}
+        <button class="btn small primary" data-live-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Live KVM</button>
       </div>
     </article>`;
+  }
+
+  function deviceRow(d) {
+    const unavailable = d.loaded === false || d.backend_available === false;
+    const badge = d.backend_available === false
+      ? '<span class="badge warn">Brak danych z integracji</span>'
+      : d.loaded === false ? '<span class="badge warn">Konfiguracja zapisana</span>' : statusBadge(d.available);
+    return `<article class="card device-row">
+      <div class="device-row-identity">
+        <div><h3>${esc(d.hostname || d.title)}</h3><div class="muted">${esc(d.base_url || '')}</div></div>
+        <div class="device-row-badges">${badge}${healthBadge(d.health)}${d.favorite ? '<span class="badge warn">★ Favorite</span>' : ''}${d.group ? `<span class="badge">${esc(d.group)}</span>` : ''}</div>
+      </div>
+      <div class="device-row-facts">
+        <div><span>Host</span><strong>${d.power === true ? 'ON' : d.power === false ? 'OFF' : '—'}</strong></div>
+        <div><span>HDMI</span><strong>${yes(d.hdmi_signal)}</strong></div>
+        <div><span>Hardware</span><strong>${esc(d.hardware || '—')}</strong></div>
+        <div><span>App</span><strong>${esc(d.application_version || '—')}</strong></div>
+      </div>
+      <div class="actions device-row-actions">
+        <button class="btn small" data-action="power_on" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power On</button>
+        <button class="btn small" data-action="power_press" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Power</button>
+        <button class="btn small danger" data-action="reset" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Reset</button>
+        ${d.admin ? `<button class="btn small" data-action="reset_hid" data-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>HID Reset</button>` : ''}
+        <button class="btn small primary" data-live-entry="${esc(d.entry_id)}" ${unavailable ? 'disabled' : ''}>Live KVM</button>
+      </div>
+      ${unavailable ? '<div class="muted device-row-warning">Urządzenie jest skonfigurowane, ale sterowanie nie jest jeszcze dostępne.</div>' : ''}
+    </article>`;
+  }
+
+  function layoutToggle() {
+    return `<div class="layout-toggle" role="group" aria-label="Sposób wyświetlania urządzeń">
+      <button class="btn small ${state.layout === 'grid' ? 'primary' : ''}" data-layout="grid" aria-pressed="${state.layout === 'grid'}">Kafelki</button>
+      <button class="btn small ${state.layout === 'list' ? 'primary' : ''}" data-layout="list" aria-pressed="${state.layout === 'list'}">Lista</button>
+    </div>`;
+  }
+
+  function renderDeviceCollection(emptyText) {
+    if (!state.devices.length) return `<div class="card">${esc(emptyText)}</div>`;
+    if (state.layout === 'list') {
+      return `<div class="device-list">${state.devices.map(deviceRow).join('')}</div>`;
+    }
+    return `<div class="device-grid">${state.devices.map(deviceCard).join('')}</div>`;
   }
 
   function renderOverview() {
@@ -105,12 +160,12 @@
       <div class="card metric"><span class="muted">Aktywne hosty</span><strong>${s.powered}</strong></div>
       <div class="card metric"><span class="muted">Alerty</span><strong>${s.alerts}</strong></div>
     </div>
-    <div class="section-title"><h2>Flota NanoKVM</h2><span class="muted">Update dostępny: ${s.updates} · Maintenance: ${s.maintenance}</span></div>
-    <div class="device-grid">${state.devices.map(deviceCard).join('') || '<div class="card">Brak skonfigurowanych urządzeń.</div>'}</div>`;
+    <div class="section-title"><h2>Flota NanoKVM</h2><div class="section-actions"><span class="muted">Update dostępny: ${s.updates} · Maintenance: ${s.maintenance}</span>${layoutToggle()}</div></div>
+    ${renderDeviceCollection('Brak skonfigurowanych urządzeń.')}`;
   }
 
   function renderDevices() {
-    return `<div class="device-grid">${state.devices.map(deviceCard).join('') || '<div class="card">Brak skonfigurowanych urządzeń. Dodaj NanoKVM w Managerze lub w integracji NanoKVM REST.</div>'}</div>`;
+    return `<div class="device-view-toolbar">${layoutToggle()}</div>${renderDeviceCollection('Brak skonfigurowanych urządzeń. Dodaj NanoKVM w Managerze lub w integracji NanoKVM REST.')}`;
   }
 
   function renderOperations() {
@@ -177,11 +232,94 @@
     } catch(e) { showNotice(e.message,true); }
   }
 
+  function renderLive() {
+    const device = state.devices.find(d => d.entry_id === state.selected) || state.devices[0];
+    if (device && state.selected !== device.entry_id) state.selected = device.entry_id;
+
+    consoleController?.stop();
+    consoleController = null;
+
+    if (!device) {
+      content.innerHTML = '<div class="card">Brak skonfigurowanych urządzeń NanoKVM.</div>';
+      return;
+    }
+
+    const unavailable = device.loaded === false || device.backend_available === false;
+    content.innerHTML = `<section class="live-console-view">
+      <div class="live-console-head">
+        <div>
+          <span class="eyebrow">Remote Console</span>
+          <h2>Live KVM</h2>
+          <p>Obraz H.264 i sterowanie klawiaturą oraz myszą przez bezpieczny bridge Home Assistant.</p>
+        </div>
+        <div class="live-device-picker"><label for="device-select">NanoKVM</label>${deviceSelect()}</div>
+      </div>
+      ${unavailable ? '<div class="card console-unavailable">Urządzenie nie jest aktualnie dostępne przez integrację NanoKVM REST.</div>' : `
+      <div class="console-toolbar">
+        <label><input id="console-keyboard" type="checkbox" checked> Klawiatura</label>
+        <label><input id="console-mouse" type="checkbox" checked> Mysz</label>
+        <label>Skala <select id="console-scale"><option value="fit">Dopasuj</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+        <button class="btn small" id="console-fullscreen">Pełny ekran</button>
+        <button class="btn small" id="console-landscape">Poziomo</button>
+        <button class="btn small" id="console-reconnect">Połącz ponownie</button>
+        <span id="console-leds" class="console-state">NUM ○ CAPS ○ SCR ○</span>
+        <span id="console-state" class="console-state" data-state="idle">idle</span>
+      </div>
+      <div id="console-shell" class="console-shell">
+        <div id="console-stage" class="console-stage">
+          <div class="console-video-wrap"><canvas id="console-canvas" width="1280" height="720"></canvas></div>
+          <div class="console-hint">Kliknij obraz, aby przejąć klawiaturę. Sterowanie myszą działa bezpośrednio na obrazie.</div>
+        </div>
+        <div class="console-controls">
+          <div class="console-keys">
+            <button class="btn small" data-console-key="Escape">Esc</button>
+            <button class="btn small" data-console-key="F2">F2</button>
+            <button class="btn small" data-console-key="F8">F8</button>
+            <button class="btn small" data-console-key="F12">F12</button>
+            <button class="btn small" data-console-key="Enter">Enter</button>
+            <button class="btn small" data-console-key="Delete">Del</button>
+            <button class="btn small danger" id="console-cad">Ctrl+Alt+Del</button>
+          </div>
+          <div class="console-paste">
+            <input id="console-paste" placeholder="Tekst do wysłania przez HID">
+            <button class="btn primary" id="console-paste-send">Wyślij tekst</button>
+          </div>
+        </div>
+      </div>`}
+    </section>`;
+    bindDeviceSelect();
+
+    if (unavailable) return;
+    consoleController = new RemoteConsoleController({
+      entryId: device.entry_id,
+      root: content,
+      requestSession: () => jsonFetch('api/console/session', {
+        method: 'POST',
+        body: JSON.stringify({entry_id: device.entry_id}),
+      }),
+      pasteText: async (text) => {
+        await rpc('nanokvm_rest/panel/hid/action', {
+          entry_id: device.entry_id,
+          action: 'paste',
+          text,
+          language: 'pl',
+        });
+        showNotice('Tekst wysłany przez HID.');
+      },
+      labels: {rotateHint: 'Obróć urządzenie poziomo.'},
+    });
+    consoleController.start();
+  }
+
   const viewMeta = {
-    overview:['Dashboard','Centrum zdalnego zarządzania NanoKVM'], devices:['Urządzenia','Sterowanie hostami i stan urządzeń'], operations:['Operations','Monitoring, health i recovery'], alerts:['Alert Center','Problemy wymagające uwagi'], updates:['Update Center','Aktualizacje aplikacji NanoKVM'], media:['Virtual Media','Biblioteka ISO/IMG i montowanie'], hid:['HID Toolbox','Klawiatura, mysz i reset HID']
+    overview:['Dashboard','Centrum zdalnego zarządzania NanoKVM'], devices:['Urządzenia','Sterowanie hostami i stan urządzeń'], live:['Live KVM','Obraz i sterowanie hostem na żywo'], operations:['Operations','Monitoring, health i recovery'], alerts:['Alert Center','Problemy wymagające uwagi'], updates:['Update Center','Aktualizacje aplikacji NanoKVM'], media:['Virtual Media','Biblioteka ISO/IMG i montowanie'], hid:['HID Toolbox','Klawiatura, mysz i reset HID']
   };
 
   function render() {
+    if (state.view !== 'live' && consoleController) {
+      consoleController.stop();
+      consoleController = null;
+    }
     const meta = viewMeta[state.view] || viewMeta.overview;
     title.textContent = meta[0]; subtitle.textContent = meta[1];
     document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
@@ -190,6 +328,7 @@
     else if (state.view === 'operations') content.innerHTML = renderOperations();
     else if (state.view === 'alerts') content.innerHTML = renderAlerts();
     else if (state.view === 'updates') content.innerHTML = renderUpdates();
+    else if (state.view === 'live') { renderLive(); return; }
     else if (state.view === 'media') { renderMedia(); return; }
     else if (state.view === 'hid') { renderHid(); return; }
     bindActions();
@@ -201,6 +340,17 @@
   }
 
   function bindActions() {
+    document.querySelectorAll('[data-layout]').forEach(btn => btn.addEventListener('click', () => {
+      const layout = btn.dataset.layout === 'list' ? 'list' : 'grid';
+      state.layout = layout;
+      storage.setItem('nanokvm-manager-device-layout', layout);
+      render();
+    }));
+    document.querySelectorAll('[data-live-entry]').forEach(btn => btn.addEventListener('click', () => {
+      state.selected = btn.dataset.liveEntry;
+      state.view = 'live';
+      render();
+    }));
     document.querySelectorAll('[data-action]').forEach(btn => btn.addEventListener('click', async () => {
       const destructive = ['reset','force_off','reboot_nanokvm'].includes(btn.dataset.action);
       if (destructive && !confirm(`Wykonać ${btn.dataset.action}?`)) return;
@@ -241,7 +391,8 @@
 
   document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => { state.view=btn.dataset.view; render(); }));
   document.getElementById('refresh').addEventListener('click', () => load(true));
-  document.getElementById('open-live').addEventListener('click', () => { if (window.top) window.top.location.href='/nanokvm-remote-server'; });
+  document.getElementById('open-live').addEventListener('click', () => { state.view='live'; render(); });
+  window.addEventListener?.('beforeunload', () => consoleController?.stop());
   load(true);
-  setInterval(() => { if (!['media','hid'].includes(state.view)) load(false); }, 30000);
+  setInterval(() => { if (!['media','hid','live'].includes(state.view)) load(false); }, 30000);
 })();

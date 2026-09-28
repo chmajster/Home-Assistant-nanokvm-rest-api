@@ -186,6 +186,54 @@ class ManagerInventoryTests(unittest.TestCase):
         self.assertFalse(self.ns["_commands_not_registered"](self.error("Device not found")))
 
 
+class ManagerConsoleSessionTests(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+        self.payload = {"entry_id": "device-1"}
+
+        def ws_call(message, *, timeout=15.0):
+            self.calls.append((message, timeout))
+            return {
+                "path": "/api/nanokvm_rest/console",
+                "protocol": "nanokvm-console",
+                "token": "nkv-test-token",
+                "expires_in": 30,
+            }
+
+        self.request = SimpleNamespace(get_json=lambda silent=True: dict(self.payload))
+        self.ns = load_functions(WEBUI, {"HAError", "api_console_session"}, {
+            "jsonify": lambda payload: payload,
+            "request": self.request,
+            "require_write_header": lambda: None,
+            "ha_ws_call": ws_call,
+        })
+
+    def test_console_session_uses_selected_entry_and_returns_bridge_session(self):
+        result = self.ns["api_console_session"]()
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["path"], "/api/nanokvm_rest/console")
+        self.assertEqual(result["protocol"], "nanokvm-console")
+        self.assertEqual(result["token"], "nkv-test-token")
+        self.assertEqual(
+            self.calls,
+            [({"type": "nanokvm_rest/panel/console/session", "entry_id": "device-1"}, 10.0)],
+        )
+
+    def test_console_session_requires_entry_id(self):
+        self.payload.clear()
+        payload, status = self.ns["api_console_session"]()
+        self.assertEqual(status, 400)
+        self.assertFalse(payload["ok"])
+
+    def test_console_session_rejects_malformed_backend_response(self):
+        self.ns["ha_ws_call"] = lambda *args, **kwargs: {"path": "/api/nanokvm_rest/console"}
+        payload, status = self.ns["api_console_session"]()
+        self.assertEqual(status, 502)
+        self.assertFalse(payload["ok"])
+        self.assertIn("invalid Remote Console session", payload["error"])
+
+
+
 class BackendLifecycleTests(unittest.IsolatedAsyncioTestCase):
     def panel_namespace(self, fail_first_load=False):
         events = []
