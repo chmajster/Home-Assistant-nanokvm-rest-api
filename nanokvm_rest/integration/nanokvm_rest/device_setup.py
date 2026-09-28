@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import NanoKVMAPIError, NanoKVMConnectionError
 
 _CONNECTION_TIMEOUT = 6
+_AUTH_GATE_STATUSES = {401, 403}
 
 
 def _alternate_origin(parsed: ParseResult, scheme: str) -> str:
@@ -76,10 +77,25 @@ async def async_probe_connection(
                 timeout=aiohttp.ClientTimeout(total=_CONNECTION_TIMEOUT),
             ) as response:
                 text = await response.text()
+
+                # Authenticated NanoKVM releases return HTTP 401 before login.
+                # This includes legacy 2.1.x-2.5.0 firmware, where the response
+                # body is the JSON string "unauthorized" instead of the normal
+                # {code,msg,data} envelope. Reaching this protected endpoint is
+                # a successful network probe; credentials are validated in the
+                # next setup step.
+                if response.status in _AUTH_GATE_STATUSES:
+                    return {
+                        "base_url": origin,
+                        "http_status": response.status,
+                        "probe_mode": "auth_required",
+                    }
+
                 if _looks_like_nanokvm_response(text):
                     return {
                         "base_url": origin,
                         "http_status": response.status,
+                        "probe_mode": "api_response",
                     }
                 failures.append(
                     f"{origin}: HTTP {response.status}, response is not NanoKVM API JSON"

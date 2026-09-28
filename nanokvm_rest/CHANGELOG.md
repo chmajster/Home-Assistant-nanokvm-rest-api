@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.12
+
+- Fixes the staged connection test for NanoKVM devices that correctly answer the protected `/api/vm/info` endpoint with HTTP 401/403 before login. These responses now mean the device is reachable instead of being misreported as a network failure.
+- Preserves the JSON fingerprint check for authentication-disabled and already-open NanoKVM API responses.
+- Restores compatibility with legacy NanoKVM 2.1.x through 2.5.0 authentication, where login returns the JWT in `data.token` and the client must send it back as the `nano-kvm-token` cookie.
+- Treats a successful legacy `/api/auth/account` response without a `role` field as the historical single administrator account, so management capabilities remain available on pre-role firmware.
+- Supports the legacy single `info.ip` field in addition to the newer `info.ips` array.
+- Improves NanoKVM Manager setup diagnostics for TLS and permission failures.
+- Aligns integration, bundled integration, app/add-on and container version at `0.11.12`.
+
 ## 0.11.10
 
 - Makes `info` the only mandatory identity endpoint during coordinator refresh; missing `hardware`, `gpio` or `hostname` endpoints now degrade individual capabilities instead of taking the whole integration offline.

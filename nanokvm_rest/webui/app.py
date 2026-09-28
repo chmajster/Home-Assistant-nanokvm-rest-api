@@ -231,6 +231,8 @@ def _flow_error(result: dict[str, Any], fallback: str) -> str:
             "cannot_connect": "Nie można połączyć się z NanoKVM.",
             "invalid_auth": "Nieprawidłowy login lub hasło.",
             "invalid_url": "Nieprawidłowy adres NanoKVM.",
+            "permission_denied": "Konto NanoKVM nie ma wymaganych uprawnień.",
+            "ssl_error": "Nie można zweryfikować certyfikatu TLS NanoKVM.",
         }
         return labels.get(str(value), str(value).replace("_", " "))
     reason = result.get("reason")
