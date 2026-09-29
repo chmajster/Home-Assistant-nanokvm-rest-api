@@ -1,0 +1,25 @@
+name: JetKVM Protocol Reference
+on:
+  push:
+    branches: [feat/jetkvm-lan-provider]
+    paths: [.github/workflows/jetkvm-protocol-reference.yaml]
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read pinned official firmware source
+        uses: actions/checkout@v4
+        with:
+          repository: jetkvm/kvm
+          ref: 939422c8b00b423f6320db04df4adfbc6d2b3012
+          persist-credentials: false
+      - name: Package reference source
+        run: git archive --format=tar.gz HEAD -o /tmp/jetkvm-reference.tar.gz
+      - name: Upload protocol reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetkvm-reference
+          path: /tmp/jetkvm-reference.tar.gz
+          retention-days: 1
