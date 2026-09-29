@@ -13,7 +13,7 @@ from typing import Any, Callable, TypeVar, cast
 import websocket
 from flask import Flask, Response, abort, jsonify, render_template, request
 
-APP_VERSION = os.environ.get("BUILD_VERSION", "0.11.14")
+APP_VERSION = os.environ.get("BUILD_VERSION", "0.12.0")
 HA_WS_URL = os.environ.get("HA_WS_URL", "ws://supervisor/core/websocket")
 HA_API_URL = os.environ.get("HA_API_URL", "http://supervisor/core/api").rstrip("/")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -23,6 +23,7 @@ _FLOW_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
 READ_COMMANDS = {
     "nanokvm_rest/panel/list",
+    "nanokvm_rest/panel/kvm/list",
     "nanokvm_rest/panel/status",
     "nanokvm_rest/panel/history",
     "nanokvm_rest/panel/ops/list",
@@ -32,6 +33,7 @@ READ_COMMANDS = {
     "nanokvm_rest/panel/hid/status",
 }
 WRITE_COMMANDS = {
+    "nanokvm_rest/panel/kvm/manage",
     "nanokvm_rest/panel/action",
     "nanokvm_rest/panel/metadata/update",
     "nanokvm_rest/panel/ops/refresh",
@@ -80,7 +82,9 @@ def _recv_json(ws: websocket.WebSocket, timeout: float) -> dict[str, Any]:
 
 def ha_ws_call(message: dict[str, Any], *, timeout: float = 15.0) -> Any:
     if not SUPERVISOR_TOKEN:
-        raise HAError("SUPERVISOR_TOKEN is not available. Check homeassistant_api in the add-on configuration.")
+        raise HAError(
+            "SUPERVISOR_TOKEN is not available. Check homeassistant_api in the add-on configuration."
+        )
     ws: websocket.WebSocket | None = None
     try:
         ws = websocket.create_connection(
@@ -110,7 +114,9 @@ def ha_ws_call(message: dict[str, Any], *, timeout: float = 15.0) -> Any:
             if response.get("success") is not True:
                 error = response.get("error") or {}
                 raise HAError(
-                    str(error.get("message") or error.get("code") or "Home Assistant command failed"),
+                    str(
+                        error.get("message") or error.get("code") or "Home Assistant command failed"
+                    ),
                     code=error.get("code"),
                 )
             return response.get("result")
@@ -134,7 +140,9 @@ def ha_api_call(
 ) -> dict[str, Any]:
     """Call a Home Assistant REST endpoint through Supervisor."""
     if not SUPERVISOR_TOKEN:
-        raise HAError("SUPERVISOR_TOKEN is not available. Check homeassistant_api in the add-on configuration.")
+        raise HAError(
+            "SUPERVISOR_TOKEN is not available. Check homeassistant_api in the add-on configuration."
+        )
 
     body = None
     headers = {
@@ -298,19 +306,21 @@ def _configured_inventory() -> dict[str, Any]:
             continue
         if not entry.get("entry_id"):
             raise HAError("Home Assistant returned a config entry without an ID")
-        devices.append({
-            "entry_id": str(entry["entry_id"]),
-            "title": str(entry.get("title") or "NanoKVM"),
-            "integration_state": str(entry.get("state") or "not_loaded"),
-            "loaded": entry.get("state") == "loaded",
-            "backend_available": False,
-            "available": False,
-            "admin": False,
-            "base_url": "",
-            "power": None,
-            "hdmi_signal": None,
-            "health": {"score": None, "state": "warning", "issues": ["backend_unavailable"]},
-        })
+        devices.append(
+            {
+                "entry_id": str(entry["entry_id"]),
+                "title": str(entry.get("title") or "NanoKVM"),
+                "integration_state": str(entry.get("state") or "not_loaded"),
+                "loaded": entry.get("state") == "loaded",
+                "backend_available": False,
+                "available": False,
+                "admin": False,
+                "base_url": "",
+                "power": None,
+                "hdmi_signal": None,
+                "health": {"score": None, "state": "warning", "issues": ["backend_unavailable"]},
+            }
+        )
     devices.sort(key=lambda item: item["title"].casefold())
     return {"devices": devices, "groups": [], "tags": []}
 
@@ -332,7 +342,13 @@ def api_bootstrap() -> tuple[Response, int] | Response:
     backend_ready = True
     try:
         try:
-            devices = _inventory_response(ha_ws_call({"type": "nanokvm_rest/panel/list"}))
+            try:
+                inventory = ha_ws_call({"type": "nanokvm_rest/panel/kvm/list"})
+            except HAError as legacy_error:
+                if not _commands_not_registered(legacy_error):
+                    raise
+                inventory = ha_ws_call({"type": "nanokvm_rest/panel/list"})
+            devices = _inventory_response(inventory)
         except HAError as err:
             if not _commands_not_registered(err):
                 raise
@@ -364,13 +380,15 @@ def api_bootstrap() -> tuple[Response, int] | Response:
                 # Optional modules must never discard a successfully loaded inventory.
                 warnings.append(f"{label}: {err}. Lista urządzeń pozostaje dostępna.")
                 app.logger.warning("NanoKVM Manager %s unavailable: %s", key, err)
-    return jsonify({
-        "ok": True,
-        "devices": devices,
-        **sections,
-        "backend_ready": backend_ready,
-        "warnings": warnings,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "devices": devices,
+            **sections,
+            "backend_ready": backend_ready,
+            "warnings": warnings,
+        }
+    )
 
 
 @app.post("/api/device/setup/connection")
@@ -392,7 +410,12 @@ def api_device_setup_connection() -> tuple[Response, int] | Response:
         )
         flow_id = str(start.get("flow_id") or "")
         if start.get("type") != "form" or start.get("step_id") != "user" or not flow_id:
-            return jsonify({"ok": False, "error": _flow_error(start, "Nie można uruchomić konfiguracji NanoKVM.")}), 502
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": _flow_error(start, "Nie można uruchomić konfiguracji NanoKVM."),
+                }
+            ), 502
 
         result = ha_api_call(
             "POST",
@@ -410,7 +433,9 @@ def api_device_setup_connection() -> tuple[Response, int] | Response:
             )
 
         _abort_flow_safely(flow_id)
-        return jsonify({"ok": False, "error": _flow_error(result, "Test połączenia nie powiódł się.")}), 400
+        return jsonify(
+            {"ok": False, "error": _flow_error(result, "Test połączenia nie powiódł się.")}
+        ), 400
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
 
@@ -450,7 +475,9 @@ def api_device_setup_authentication() -> tuple[Response, int] | Response:
             )
 
         status = 409 if result.get("reason") == "already_configured" else 400
-        return jsonify({"ok": False, "error": _flow_error(result, "Test autentykacji nie powiódł się.")}), status
+        return jsonify(
+            {"ok": False, "error": _flow_error(result, "Test autentykacji nie powiódł się.")}
+        ), status
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
 
@@ -481,7 +508,9 @@ def api_device_setup_create() -> tuple[Response, int] | Response:
                     "title": entry.get("title") or result.get("title") or "NanoKVM",
                 }
             )
-        return jsonify({"ok": False, "error": _flow_error(result, "Nie udało się dodać urządzenia.")}), 400
+        return jsonify(
+            {"ok": False, "error": _flow_error(result, "Nie udało się dodać urządzenia.")}
+        ), 400
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
 
@@ -527,7 +556,7 @@ def api_console_session() -> tuple[Response, int] | Response:
             raise HAError("NanoKVM REST returned an invalid Remote Console session")
         return jsonify({"ok": True, **result})
     except HAError as err:
-        return jsonify({"ok": False, "error": str(err)}), 502
+        return jsonify({"ok": False, "error": str(err), "code": err.code}), 502
 
 
 @app.post("/api/rpc")
@@ -540,7 +569,9 @@ def api_rpc() -> Response:
         return jsonify({"ok": False, "error": "Command is not allowed"}), 400
     payload = {key: value for key, value in body.items() if key != "id"}
     try:
-        result = ha_ws_call(payload, timeout=30.0 if command_type.endswith("/device") else 15.0)
+        result = ha_ws_call(
+            payload, timeout=35.0 if command_type.endswith(("/device", "/manage")) else 15.0
+        )
         return jsonify({"ok": True, "result": result})
     except HAError as err:
         return jsonify({"ok": False, "error": str(err)}), 502
@@ -548,7 +579,9 @@ def api_rpc() -> Response:
 
 @app.errorhandler(403)
 def forbidden(_: Exception) -> tuple[Response, int]:
-    return jsonify({"ok": False, "error": "Administrator access through Home Assistant Ingress is required."}), 403
+    return jsonify(
+        {"ok": False, "error": "Administrator access through Home Assistant Ingress is required."}
+    ), 403
 
 
 @app.errorhandler(404)

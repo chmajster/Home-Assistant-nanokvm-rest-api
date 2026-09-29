@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import tempfile
 from copy import deepcopy
 from datetime import datetime, timezone
-import os
 from pathlib import Path
-import tempfile
 from typing import Any
 from uuid import uuid4
 
-from aiohttp import web
 import voluptuous as vol
-
+from aiohttp import web
 from homeassistant.components import websocket_api
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.core import HomeAssistant
@@ -24,6 +23,7 @@ from .advanced_store import RemoteAdvancedStore
 from .api import NanoKVMConnectionError, NanoKVMError
 from .const import DOMAIN
 from .management import async_delete_image, async_get_virtual_media, async_reset_hid
+from .providers.registry import native_entries
 from .remote_advanced import (
     async_cancel_image_download,
     async_get_hid_toolbox,
@@ -148,7 +148,12 @@ async def _run_update_one(
         entry_id,
         "update_started",
         actor=actor,
-        details={"from": before, "target": target, "channel": info["channel"], "batch_id": batch_id},
+        details={
+            "from": before,
+            "target": target,
+            "channel": info["channel"],
+            "batch_id": batch_id,
+        },
     )
 
     request_error = ""
@@ -164,7 +169,12 @@ async def _run_update_one(
             "update_failed",
             actor=actor,
             result="error",
-            details={"message": str(err)[:200], "from": before, "target": target, "batch_id": batch_id},
+            details={
+                "message": str(err)[:200],
+                "from": before,
+                "target": target,
+                "batch_id": batch_id,
+            },
         )
         return "error"
 
@@ -252,6 +262,7 @@ async def _run_batch(hass: HomeAssistant, batch_id: str, entry_ids: list[str], a
 @websocket_api.async_response
 async def websocket_update_list(hass, connection, msg) -> None:
     """Return Update Center state for every NanoKVM."""
+
     async def build(entry: Any) -> dict[str, Any]:
         coordinator = base._loaded_coordinator(hass, entry.entry_id)  # noqa: SLF001
         item = {
@@ -278,7 +289,7 @@ async def websocket_update_list(hass, connection, msg) -> None:
         item["runtime"] = deepcopy(_runtime(hass)["devices"].get(entry.entry_id, {"state": "idle"}))
         return item
 
-    entries = hass.config_entries.async_entries(DOMAIN)
+    entries = native_entries(hass)
     items = await asyncio.gather(*(build(entry) for entry in entries))
     connection.send_result(
         msg["id"],
@@ -431,7 +442,9 @@ async def websocket_media_favorite(hass, connection, msg) -> None:
         files = [str(item) for item in images.get("files") or []]
         if msg["path"] not in files:
             raise ValueError("image is not present on NanoKVM")
-        await _advanced_store(hass).async_set_favorite(msg["entry_id"], msg["path"], msg["favorite"])
+        await _advanced_store(hass).async_set_favorite(
+            msg["entry_id"], msg["path"], msg["favorite"]
+        )
         connection.send_result(msg["id"], {"ok": True})
     except (NanoKVMError, ValueError) as err:
         connection.send_error(msg["id"], "favorite_failed", str(err))
@@ -525,7 +538,9 @@ async def websocket_media_download_start(hass, connection, msg) -> None:
         await _advanced_store(hass).async_record_media(
             msg["entry_id"], path, source="url", source_url=msg["url"]
         )
-        await base._remote_store(hass).async_add_event(  # noqa: SLF001
+        await base._remote_store(
+            hass
+        ).async_add_event(  # noqa: SLF001
             msg["entry_id"],
             "iso_download_started",
             actor=_actor(connection),

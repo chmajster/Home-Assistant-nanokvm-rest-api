@@ -2,11 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Połącz z NanoKVM",
-        "description": "Krok 1 z 3: sprawdź, czy podany adres odpowiada prawidłowemu API NanoKVM przez HTTP/HTTPS. W tym kroku dane logowania nie są wysyłane.",
+        "title": "Dodaj urządzenie KVM",
+        "description": "Wybierz NanoKVM lub JetKVM i podaj adres. NanoKVM zachowuje trzyetapową konfigurację, a JetKVM sprawdza połączenie i opcjonalne hasło lokalne.",
         "data": {
-          "base_url": "Adres NanoKVM",
-          "verify_ssl": "Weryfikuj certyfikat TLS"
+          "base_url": "Adres IP / hostname",
+          "verify_ssl": "Weryfikuj certyfikat TLS",
+          "provider": "Typ urządzenia"
         },
         "data_description": {
           "base_url": "Np. 192.168.1.50 lub nanokvm.local. Można również podać pełny adres HTTP lub HTTPS."
@@ -25,43 +26,104 @@
         "description": "Krok 3 z 3: uwierzytelnienie działa. Dodaj {title} ({device_key}) pod adresem {base_url} do Home Assistant."
       },
       "reauth_confirm": {
-        "title": "Ponowne uwierzytelnienie NanoKVM",
-        "description": "Uwierzytelnienie nie powiodło się. Podaj prawidłowe dane logowania NanoKVM.",
+        "title": "Konfiguracja urządzenia KVM",
+        "description": "Zmień połączenie lub hasło. Puste hasło zachowuje poprzednie. Nowa konfiguracja jest testowana przed zastąpieniem poprzedniej.",
         "data": {
           "username": "Nazwa użytkownika",
-          "password": "Hasło"
+          "password": "Hasło lokalne (opcjonalnie)",
+          "title": "Nazwa urządzenia",
+          "base_url": "Adres IPv4, IPv6 lub hostname (opcjonalnie :port i https://)",
+          "verify_ssl": "Weryfikuj certyfikat TLS",
+          "certificate_sha256": "Odcisk certyfikatu SHA-256 (opcjonalnie)",
+          "lan_networks": "Dodatkowe podsieci LAN (CIDR, rozdziel przecinkiem)"
         }
       },
       "reconfigure": {
-        "title": "Zmień konfigurację NanoKVM",
-        "description": "Zmień ustawienia połączenia. Pozostaw hasło puste, aby zachować obecne hasło.",
+        "title": "Konfiguracja urządzenia KVM",
+        "description": "Zmień połączenie lub hasło. Puste hasło zachowuje poprzednie. Nowa konfiguracja jest testowana przed zastąpieniem poprzedniej.",
         "data": {
-          "base_url": "Adres NanoKVM",
+          "base_url": "Adres IPv4, IPv6 lub hostname (opcjonalnie :port i https://)",
           "username": "Nazwa użytkownika",
-          "password": "Nowe hasło (opcjonalne)",
-          "verify_ssl": "Weryfikuj certyfikat TLS"
+          "password": "Hasło lokalne (opcjonalnie)",
+          "verify_ssl": "Weryfikuj certyfikat TLS",
+          "title": "Nazwa urządzenia",
+          "certificate_sha256": "Odcisk certyfikatu SHA-256 (opcjonalnie)",
+          "lan_networks": "Dodatkowe podsieci LAN (CIDR, rozdziel przecinkiem)"
+        }
+      },
+      "jetkvm": {
+        "title": "JetKVM LAN",
+        "description": "Podaj adres i hasło tylko gdy urządzenie używa lokalnego uwierzytelniania. Test jest wykonywany przez Home Assistant; domyślnie HTTP, port 80.",
+        "data": {
+          "title": "Nazwa urządzenia",
+          "base_url": "Adres IPv4, IPv6 lub hostname (opcjonalnie :port i https://)",
+          "password": "Hasło lokalne (opcjonalnie)",
+          "verify_ssl": "Weryfikuj certyfikat TLS",
+          "certificate_sha256": "Odcisk certyfikatu SHA-256 (opcjonalnie)",
+          "lan_networks": "Dodatkowe podsieci LAN (CIDR, rozdziel przecinkiem)"
         }
       }
     },
     "error": {
       "cannot_connect": "Nie można połączyć się z prawidłowym API NanoKVM. Sprawdź adres, port, reguły VLAN/firewall oraz czy Home Assistant ma dostęp sieciowy do urządzenia.",
       "invalid_auth": "Nieprawidłowy login lub hasło NanoKVM.",
-      "invalid_url": "Nieprawidłowy adres NanoKVM.",
-      "permission_denied": "Konto NanoKVM nie ma uprawnień do wymaganego endpointu konfiguracji. Użyj konta administratora lub zmień uprawnienia konta.",
-      "ssl_error": "Nie udało się zweryfikować certyfikatu TLS. Sprawdź nazwę hosta i certyfikat albo wyłącz weryfikację TLS tylko wtedy, gdy ufasz temu NanoKVM i sieci."
+      "invalid_url": "Podaj prawidłowy adres IPv4, IPv6 lub hostname oraz port 1–65535.",
+      "permission_denied": "Urządzenie nie zezwala na tę operację dla bieżącej sesji.",
+      "ssl_error": "Nie udało się zweryfikować certyfikatu TLS. Sprawdź nazwę hosta i certyfikat albo wyłącz weryfikację TLS tylko wtedy, gdy ufasz temu NanoKVM i sieci.",
+      "forbidden_target": "Adres nie należy do dozwolonej sieci LAN lub wskazuje chronioną usługę lokalną.",
+      "dns_error": "Nie można odnaleźć hosta w DNS. Sprawdź nazwę i konfigurację DNS/mDNS Home Assistant.",
+      "connection_refused": "Urządzenie odrzuca połączenie. Sprawdź, czy jest włączone i czy port jest prawidłowy.",
+      "timeout": "Urządzenie nie odpowiedziało w wyznaczonym czasie. Sprawdź połączenie z siecią LAN.",
+      "tls_error": "Nie można zweryfikować połączenia TLS. Sprawdź certyfikat i protokół urządzenia.",
+      "unreachable": "Brak odpowiedzi z urządzenia. Sprawdź adres, trasę sieciową i zaporę.",
+      "not_jetkvm": "Host odpowiada, ale odpowiedź nie jest zgodna z lokalnym API JetKVM.",
+      "setup_required": "JetKVM wymaga pierwszej konfiguracji w swoim lokalnym interfejsie.",
+      "authentication_required": "JetKVM wymaga lokalnego hasła. Podaj je w konfiguracji urządzenia.",
+      "invalid_password": "Urządzenie odrzuciło hasło. Popraw dane dostępowe i ponów test.",
+      "rate_limited": "Zbyt wiele prób logowania. Odczekaj przed ponowną próbą.",
+      "protocol_error": "Urządzenie zwróciło nieprawidłową odpowiedź protokołu KVM.",
+      "busy": "To urządzenie ma już aktywną sesję KVM. Rozłącz ją przed otwarciem następnej.",
+      "unsupported": "Wybrana funkcja nie jest dostępna dla tego urządzenia lub transportu.",
+      "session_required": "Ta operacja wymaga aktywnej sesji Live KVM.",
+      "unknown_provider": "Nieobsługiwany typ urządzenia KVM.",
+      "secret_storage": "Nie można odczytać magazynu sekretów KVM. Sprawdź klucz i uprawnienia pliku.",
+      "wrong_device": "Pod nowym adresem odpowiada inne urządzenie. Poprzednia konfiguracja nie została zmieniona.",
+      "invalid_data": "Nieprawidłowe dane urządzenia.",
+      "not_found": "Nie znaleziono urządzenia KVM."
     },
     "abort": {
-      "already_configured": "To urządzenie NanoKVM jest już skonfigurowane.",
+      "already_configured": "To urządzenie KVM jest już skonfigurowane.",
       "reauth_successful": "Dane logowania NanoKVM zostały zaktualizowane.",
       "reconfigure_successful": "Konfiguracja NanoKVM została zaktualizowana.",
       "setup_restart": "Sesja dodawania urządzenia wygasła lub jest nieprawidłowa. Rozpocznij konfigurację ponownie.",
-      "wrong_device": "Podane ustawienia wskazują na inne urządzenie NanoKVM."
+      "wrong_device": "Pod nowym adresem odpowiada inne urządzenie. Poprzednia konfiguracja nie została zmieniona.",
+      "invalid_url": "Podaj prawidłowy adres IPv4, IPv6 lub hostname oraz port 1–65535.",
+      "forbidden_target": "Adres nie należy do dozwolonej sieci LAN lub wskazuje chronioną usługę lokalną.",
+      "dns_error": "Nie można odnaleźć hosta w DNS. Sprawdź nazwę i konfigurację DNS/mDNS Home Assistant.",
+      "connection_refused": "Urządzenie odrzuca połączenie. Sprawdź, czy jest włączone i czy port jest prawidłowy.",
+      "timeout": "Urządzenie nie odpowiedziało w wyznaczonym czasie. Sprawdź połączenie z siecią LAN.",
+      "tls_error": "Nie można zweryfikować połączenia TLS. Sprawdź certyfikat i protokół urządzenia.",
+      "unreachable": "Brak odpowiedzi z urządzenia. Sprawdź adres, trasę sieciową i zaporę.",
+      "not_jetkvm": "Host odpowiada, ale odpowiedź nie jest zgodna z lokalnym API JetKVM.",
+      "setup_required": "JetKVM wymaga pierwszej konfiguracji w swoim lokalnym interfejsie.",
+      "authentication_required": "JetKVM wymaga lokalnego hasła. Podaj je w konfiguracji urządzenia.",
+      "invalid_password": "Urządzenie odrzuciło hasło. Popraw dane dostępowe i ponów test.",
+      "rate_limited": "Zbyt wiele prób logowania. Odczekaj przed ponowną próbą.",
+      "protocol_error": "Urządzenie zwróciło nieprawidłową odpowiedź protokołu KVM.",
+      "permission_denied": "Urządzenie nie zezwala na tę operację dla bieżącej sesji.",
+      "busy": "To urządzenie ma już aktywną sesję KVM. Rozłącz ją przed otwarciem następnej.",
+      "unsupported": "Wybrana funkcja nie jest dostępna dla tego urządzenia lub transportu.",
+      "session_required": "Ta operacja wymaga aktywnej sesji Live KVM.",
+      "unknown_provider": "Nieobsługiwany typ urządzenia KVM.",
+      "secret_storage": "Nie można odczytać magazynu sekretów KVM. Sprawdź klucz i uprawnienia pliku.",
+      "invalid_data": "Nieprawidłowe dane urządzenia.",
+      "not_found": "Nie znaleziono urządzenia KVM."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Opcje NanoKVM",
+        "title": "Opcje urządzenia KVM",
         "data": {
           "show_sidebar_panel": "Dodaj Remote Server do paska bocznego Home Assistant",
           "scan_interval": "Interwał odpytywania (sekundy)",
@@ -69,7 +131,7 @@
         },
         "data_description": {
           "show_sidebar_panel": "Pokazuje lub ukrywa panel Remote Server w pasku bocznym Home Assistant. Panel jest dostępny tylko dla administratorów. Przy wielu NanoKVM pozostaje widoczny, jeśli co najmniej jeden wpis ma tę opcję włączoną.",
-          "scan_interval": "Jak często Home Assistant odświeża stan NanoKVM (30–3600 sekund).",
+          "scan_interval": "JetKVM: 10–30 sekund. NanoKVM: dotychczasowe 30–3600 sekund.",
           "force_off_ms": "Jak długo przycisk zasilania jest przytrzymywany przy wymuszonym wyłączeniu (1000–10000 ms)."
         }
       }

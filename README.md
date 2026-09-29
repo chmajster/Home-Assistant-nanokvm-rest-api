@@ -2,6 +2,27 @@
 
 Custom Home Assistant integration for Sipeed NanoKVM using the local NanoKVM REST API. No MQTT or SSH fallback is required.
 
+## Supported devices
+
+- **NanoKVM** — existing Home Assistant entities, native device management and H.264/HID Live KVM.
+- **JetKVM** — LAN HTTP/HTTPS connection, local authentication, status monitoring and native WebRTC Live KVM in **NanoKVM Manager**. Keyboard/mouse, runtime-detected ATX extension and Wake-on-LAN are supported. NanoKVM-specific update/recovery/media controls are not offered for JetKVM.
+
+### JetKVM
+
+1. Connect JetKVM to Ethernet/LAN and complete its initial local setup.
+2. Read its IP address from the device display/router.
+3. Open **NanoKVM Manager → Devices → Add**.
+4. Select **JetKVM**.
+5. Enter the IP/hostname, optionally a port; defaults are HTTP and 80. IPv6 is supported.
+6. Enter the local password only when local authentication is enabled.
+7. Select **Test Connection**.
+8. Select **Save**.
+9. Open **Live KVM**.
+
+Home Assistant handles device credentials and signaling. The browser receives video/input directly over WebRTC, so **both Home Assistant and the browser must be able to reach the JetKVM LAN (or routed VPN)**. This is not a TURN/media relay through Home Assistant Cloud.
+
+See [JetKVM setup, security, protocol and acceptance checklist](docs/jetkvm.md). Before upgrading, back up Home Assistant including the KVM credential key described there.
+
 ## Features
 
 - UI setup through Home Assistant Config Flow and support for multiple NanoKVM devices.
@@ -227,7 +248,7 @@ The AES password wrapper is not a replacement for transport encryption. Use HTTP
 
 Firmware/application updates, NanoKVM reboot, swap changes, virtual USB changes and virtual-media operations can temporarily interrupt KVM access. Administrator-only controls are not exposed to normal NanoKVM user accounts.
 
-Passwords and session tokens are not exposed as Home Assistant entity attributes or diagnostics data. Diagnostics redact configured addresses, IP fields, usernames and mDNS identifiers. Do not expose the NanoKVM REST API directly to the Internet.
+Passwords and session tokens are not exposed as Home Assistant entity attributes or diagnostics data. Starting with ConfigEntry version 2, both providers store passwords encrypted using a shared local vault; version-1 NanoKVM entries migrate automatically. Existing external backups may still contain old plaintext credentials; the migration does not rewrite external backups. Diagnostics redact configured addresses, IP fields, usernames and mDNS identifiers. Do not expose the NanoKVM REST API directly to the Internet.
 
 ## Compatibility
 

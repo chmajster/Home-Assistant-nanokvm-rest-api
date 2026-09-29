@@ -36,6 +36,10 @@ from .const import (
     MIN_SCAN_INTERVAL,
 )
 from .device_setup import async_probe_connection
+from .providers.configuration import async_validate_candidate, unique_id_for
+from .providers.errors import KVMError
+from .providers.registry import provider_name, provider_spec
+from .providers.secrets import async_password, async_protect_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +75,8 @@ def normalize_base_url(value: str) -> str:
         or parsed.query
         or parsed.fragment
         or parsed.path not in {"", "/"}
-        or parsed_port is not None and not 1 <= parsed_port <= 65535
+        or parsed_port is not None
+        and not 1 <= parsed_port <= 65535
     ):
         raise ValueError("invalid URL")
 
@@ -88,7 +93,7 @@ def _api_error_key(err: NanoKVMAPIError) -> str:
 class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle NanoKVM REST setup."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize staged setup state."""
@@ -96,19 +101,15 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pending_title = ""
         self._pending_device_key = ""
 
-    async def _async_validate(
-        self, data: dict[str, Any]
-    ) -> tuple[str, str]:
+    async def _async_validate(self, data: dict[str, Any]) -> tuple[str, str]:
         """Validate connection data and return unique ID and title."""
         base_url = normalize_base_url(data[CONF_BASE_URL])
-        session = async_get_clientsession(
-            self.hass, verify_ssl=data.get(CONF_VERIFY_SSL, True)
-        )
+        session = async_get_clientsession(self.hass, verify_ssl=data.get(CONF_VERIFY_SSL, True))
         client = NanoKVMClient(
             session,
             base_url,
             data[CONF_USERNAME],
-            data[CONF_PASSWORD],
+            await async_password(self.hass, data),
         )
 
         await client.async_login()
@@ -134,14 +135,71 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "Changing the device IP/hostname may create a duplicate entry.",
                 client.base_url,
             )
-        title = str(
-            hostname.get("hostname")
-            or urlparse(client.base_url).hostname
-            or "NanoKVM"
-        )
+        title = str(hostname.get("hostname") or urlparse(client.base_url).hostname or "NanoKVM")
         return device_key, title
 
-    async def async_step_user(
+    async def async_step_user(self, user_input=None):
+        """Select the provider without changing the existing NanoKVM steps."""
+        handlers = {"nanokvm": self._async_step_nanokvm_user, "jetkvm": self._async_start_jetkvm}
+        try:
+            name = provider_name(user_input or {})
+        except KVMError:
+            return self.async_abort(reason="unknown_provider")
+        return await handlers[name](user_input)
+
+    async def _async_start_jetkvm(self, user_input):
+        self._pending_data = dict(user_input or {})
+        return await self.async_step_jetkvm()
+
+    async def async_step_jetkvm(self, user_input=None):
+        """Local JetKVM password is optional; no secret is echoed to the form."""
+        errors = {}
+        if user_input is not None:
+            try:
+                data, info = await async_validate_candidate(
+                    self.hass, {**user_input, "provider": "jetkvm"}
+                )
+            except KVMError as err:
+                errors["base"] = err.code
+            else:
+                await self.async_set_unique_id(unique_id_for(data, info["device_id"]))
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=str(user_input.get("title") or urlparse(data[CONF_BASE_URL]).hostname),
+                    data=await async_protect_data(self.hass, data),
+                )
+        defaults = self._pending_data or {}
+        return self.async_show_form(
+            step_id="jetkvm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("title", default="JetKVM"): str,
+                    vol.Required(CONF_BASE_URL, default=defaults.get(CONF_BASE_URL, "")): str,
+                    vol.Optional(CONF_PASSWORD): str,
+                    vol.Required(
+                        CONF_VERIFY_SSL, default=defaults.get(CONF_VERIFY_SSL, True)
+                    ): bool,
+                    vol.Optional("certificate_sha256", default=""): str,
+                    vol.Optional("lan_networks", default=""): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_import(self, user_input):
+        """Manager Save creates a real ConfigEntry through the standard flow."""
+        try:
+            data, info = await async_validate_candidate(self.hass, user_input)
+        except KVMError as err:
+            return self.async_abort(reason=err.code)
+        await self.async_set_unique_id(unique_id_for(data, info["device_id"]))
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=str(user_input.get("title") or urlparse(data[CONF_BASE_URL]).hostname),
+            data=await async_protect_data(self.hass, data),
+        )
+
+    async def _async_step_nanokvm_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Test reachability before asking for credentials."""
@@ -176,6 +234,9 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required("provider", default="nanokvm"): vol.In(
+                        {"nanokvm": "NanoKVM", "jetkvm": "JetKVM"}
+                    ),
                     vol.Required(CONF_BASE_URL): str,
                     vol.Required(CONF_VERIFY_SSL, default=True): bool,
                 }
@@ -183,9 +244,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_auth(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_auth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Test NanoKVM authentication without creating the entry yet."""
         if self._pending_data is None:
             return self.async_abort(reason="setup_restart")
@@ -248,7 +307,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(
                 title=self._pending_title,
-                data=self._pending_data,
+                data=await async_protect_data(self.hass, self._pending_data),
             )
 
         return self.async_show_form(
@@ -261,9 +320,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_reauth(
-        self, entry_data: dict[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Start reauthentication after an authentication failure."""
         return await self.async_step_reauth_confirm()
 
@@ -272,6 +329,8 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Validate replacement credentials."""
         entry = self._get_reauth_entry()
+        if not provider_spec(entry.data).native_management:
+            return await self._async_provider_update(entry, user_input, "reauth_confirm")
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -299,11 +358,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_mismatch(reason="wrong_device")
                 return self.async_update_reload_and_abort(
                     entry,
-                    data_updates={
-                        CONF_BASE_URL: data[CONF_BASE_URL],
-                        CONF_USERNAME: user_input[CONF_USERNAME],
-                        CONF_PASSWORD: user_input[CONF_PASSWORD],
-                    },
+                    data_updates=await async_protect_data(self.hass, data),
                 )
 
         return self.async_show_form(
@@ -324,10 +379,14 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Reconfigure connection settings."""
         entry = self._get_reconfigure_entry()
+        if not provider_spec(entry.data).native_management:
+            return await self._async_provider_update(entry, user_input, "reconfigure")
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            password = user_input.get(CONF_PASSWORD) or entry.data[CONF_PASSWORD]
+            password = user_input.get(CONF_PASSWORD) or await async_password(
+                self.hass, dict(entry.data)
+            )
             data = {
                 CONF_BASE_URL: user_input[CONF_BASE_URL],
                 CONF_USERNAME: user_input[CONF_USERNAME],
@@ -352,7 +411,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_mismatch(reason="wrong_device")
                 return self.async_update_reload_and_abort(
                     entry,
-                    data_updates=data,
+                    data_updates=await async_protect_data(self.hass, data),
                     title=title,
                 )
 
@@ -360,9 +419,7 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_BASE_URL, default=entry.data[CONF_BASE_URL]
-                    ): str,
+                    vol.Required(CONF_BASE_URL, default=entry.data[CONF_BASE_URL]): str,
                     vol.Required(
                         CONF_USERNAME, default=entry.data.get(CONF_USERNAME, "admin")
                     ): str,
@@ -371,6 +428,47 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_VERIFY_SSL,
                         default=entry.data.get(CONF_VERIFY_SSL, True),
                     ): bool,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def _async_provider_update(self, entry, user_input, step_id):
+        errors = {}
+        if user_input is not None:
+            payload = dict(user_input)
+            # An omitted/blank field keeps the working password. The Manager
+            # offers a separate explicit clear-password control for noPassword.
+            if not payload.get(CONF_PASSWORD):
+                payload.pop(CONF_PASSWORD, None)
+            try:
+                data, info = await async_validate_candidate(self.hass, payload, dict(entry.data))
+                if entry.unique_id and unique_id_for(data, info["device_id"]) != entry.unique_id:
+                    raise KVMError("wrong_device")
+            except KVMError as err:
+                errors["base"] = err.code
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=await async_protect_data(self.hass, data),
+                    title=str(user_input.get("title") or entry.title),
+                )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("title", default=entry.title): str,
+                    vol.Required(CONF_BASE_URL, default=entry.data[CONF_BASE_URL]): str,
+                    vol.Optional(CONF_PASSWORD): str,
+                    vol.Required(
+                        CONF_VERIFY_SSL, default=entry.data.get(CONF_VERIFY_SSL, True)
+                    ): bool,
+                    vol.Optional(
+                        "certificate_sha256", default=entry.data.get("certificate_sha256", "")
+                    ): str,
+                    vol.Optional(
+                        "lan_networks", default=", ".join(entry.data.get("lan_networks", []))
+                    ): str,
                 }
             ),
             errors=errors,
@@ -386,12 +484,23 @@ class NanoKVMConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class NanoKVMOptionsFlow(OptionsFlowWithReload):
     """Manage optional NanoKVM behavior."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage NanoKVM options."""
         if user_input is not None:
             return self.async_create_entry(data=user_input)
+
+        if not provider_spec(self.config_entry.data).native_management:
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_SCAN_INTERVAL,
+                            default=self.config_entry.options.get(CONF_SCAN_INTERVAL, 20),
+                        ): vol.All(vol.Coerce(int), vol.Range(min=10, max=30)),
+                    }
+                ),
+            )
 
         schema = vol.Schema(
             {
@@ -413,9 +522,7 @@ class NanoKVMOptionsFlow(OptionsFlowWithReload):
                 ),
                 vol.Required(
                     CONF_FORCE_OFF_MS,
-                    default=self.config_entry.options.get(
-                        CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS
-                    ),
+                    default=self.config_entry.options.get(CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS),
                 ): vol.All(
                     vol.Coerce(int),
                     vol.Range(min=MIN_FORCE_OFF_MS, max=MAX_FORCE_OFF_MS),

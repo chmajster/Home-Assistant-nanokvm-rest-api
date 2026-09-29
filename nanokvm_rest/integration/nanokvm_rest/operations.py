@@ -9,7 +9,6 @@ from time import monotonic, time
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components import persistent_notification, websocket_api
 from homeassistant.core import HomeAssistant
 
@@ -18,6 +17,7 @@ from .api import NanoKVMError
 from .const import DOMAIN
 from .management import async_reset_hid
 from .operations_store import OperationsStore
+from .providers.registry import native_entries
 
 DATA_OPERATIONS_STORE = f"{DOMAIN}_operations_store"
 DATA_OPERATIONS_RUNTIME = f"{DOMAIN}_operations_runtime"
@@ -245,7 +245,9 @@ async def _maybe_auto_recover_hdmi(
     cooldown = int(auto.get("cooldown_seconds") or 900)
     if now - float(device_runtime.get("last_auto_recovery") or 0.0) < cooldown:
         return
-    attempts = [float(ts) for ts in device_runtime.get("auto_attempts") or [] if now - float(ts) < 3600]
+    attempts = [
+        float(ts) for ts in device_runtime.get("auto_attempts") or [] if now - float(ts) < 3600
+    ]
     if len(attempts) >= int(auto.get("max_attempts_per_hour") or 3):
         device_runtime["auto_attempts"] = attempts
         return
@@ -288,7 +290,9 @@ async def _maybe_auto_recover_hdmi(
                 "updated_at": _utcnow(),
             }
         )
-        await base._remote_store(hass).async_add_event(  # noqa: SLF001
+        await base._remote_store(
+            hass
+        ).async_add_event(  # noqa: SLF001
             entry_id,
             "auto_recovery_failed",
             actor="system",
@@ -297,7 +301,9 @@ async def _maybe_auto_recover_hdmi(
         )
 
 
-async def _probe_device(hass: HomeAssistant, entry_id: str, *, allow_recovery: bool = True) -> dict[str, Any]:
+async def _probe_device(
+    hass: HomeAssistant, entry_id: str, *, allow_recovery: bool = True
+) -> dict[str, Any]:
     entry = hass.config_entries.async_get_entry(entry_id)
     coordinator = base._loaded_coordinator(hass, entry_id)  # noqa: SLF001
     title = entry.title if entry is not None else entry_id
@@ -326,17 +332,21 @@ async def _probe_device(hass: HomeAssistant, entry_id: str, *, allow_recovery: b
     capabilities = data.get("capabilities") or {}
     hdmi = data.get("hdmi")
     version = data.get("application_version") or {}
-    power = bool(gpio.get("pwr")) if "pwr" in gpio else (
-        bool((data.get("gpio") or {}).get("pwr")) if "pwr" in (data.get("gpio") or {}) else None
+    power = (
+        bool(gpio.get("pwr"))
+        if "pwr" in gpio
+        else (
+            bool((data.get("gpio") or {}).get("pwr")) if "pwr" in (data.get("gpio") or {}) else None
+        )
     )
-    hdmi_signal = (
-        bool(hdmi.get("signal"))
-        if isinstance(hdmi, dict) and "signal" in hdmi
-        else None
+    hdmi_signal = bool(hdmi.get("signal")) if isinstance(hdmi, dict) and "signal" in hdmi else None
+    current_version = str(
+        version.get("current") or version.get("version") or version.get("installed") or ""
     )
-    current_version = str(version.get("current") or version.get("version") or version.get("installed") or "")
     latest_version = str(version.get("latest") or "")
-    update_available = bool(current_version and latest_version and current_version != latest_version)
+    update_available = bool(
+        current_version and latest_version and current_version != latest_version
+    )
 
     runtime["available"] = available
     runtime["latency_ms"] = latency_ms
@@ -412,9 +422,7 @@ async def _probe_device(hass: HomeAssistant, entry_id: str, *, allow_recovery: b
     }
 
     if coordinator is not None and allow_recovery:
-        await _maybe_auto_recover_hdmi(
-            hass, entry_id, coordinator, runtime, settings, maintenance
-        )
+        await _maybe_auto_recover_hdmi(hass, entry_id, coordinator, runtime, settings, maintenance)
         snapshot["recovery"] = deepcopy(runtime.get("recovery") or {})
 
     alerts = _build_alerts(entry_id, title, snapshot, operations_store, maintenance)
@@ -438,7 +446,7 @@ async def _monitor_cycle(hass: HomeAssistant) -> None:
     if lock.locked():
         return
     async with lock:
-        entries = hass.config_entries.async_entries(DOMAIN)
+        entries = native_entries(hass)
         if entries:
             await asyncio.gather(
                 *(_probe_device(hass, entry.entry_id) for entry in entries),
@@ -484,7 +492,9 @@ def _device_view(hass: HomeAssistant, entry_id: str) -> dict[str, Any]:
         "force_off",
         "reset",
     }
-    snapshot["power_timeline"] = [event for event in events if event.get("event") in power_events][:100]
+    snapshot["power_timeline"] = [event for event in events if event.get("event") in power_events][
+        :100
+    ]
     snapshot["recent_events"] = events[:50]
     return snapshot
 
@@ -498,7 +508,7 @@ async def websocket_ops_list(hass, connection, msg) -> None:
     remote_store = base._remote_store(hass)  # noqa: SLF001
     devices: list[dict[str, Any]] = []
     alerts: list[dict[str, Any]] = []
-    for entry in hass.config_entries.async_entries(DOMAIN):
+    for entry in native_entries(hass):
         runtime = _runtime_device(hass, entry.entry_id)
         item = deepcopy(runtime.get("snapshot") or {})
         if not item:
@@ -506,9 +516,19 @@ async def websocket_ops_list(hass, connection, msg) -> None:
         item.update(base._public_metadata(remote_store, entry.entry_id))  # noqa: SLF001
         devices.append(item)
         alerts.extend(deepcopy(runtime.get("alerts") or []))
-    devices.sort(key=lambda item: (item.get("health", {}).get("score", 0), str(item.get("title", "")).casefold()))
+    devices.sort(
+        key=lambda item: (
+            item.get("health", {}).get("score", 0),
+            str(item.get("title", "")).casefold(),
+        )
+    )
     severity_order = {"critical": 0, "warning": 1, "info": 2}
-    alerts.sort(key=lambda item: (severity_order.get(str(item.get("severity")), 9), str(item.get("title", "")).casefold()))
+    alerts.sort(
+        key=lambda item: (
+            severity_order.get(str(item.get("severity")), 9),
+            str(item.get("title", "")).casefold(),
+        )
+    )
     connection.send_result(
         msg["id"],
         {
@@ -518,9 +538,19 @@ async def websocket_ops_list(hass, connection, msg) -> None:
             "summary": {
                 "total": len(devices),
                 "online": sum(1 for item in devices if item.get("available")),
-                "maintenance": sum(1 for item in devices if (item.get("maintenance") or {}).get("enabled")),
-                "critical": sum(1 for item in alerts if item.get("severity") == "critical" and not item.get("acknowledged")),
-                "warning": sum(1 for item in alerts if item.get("severity") == "warning" and not item.get("acknowledged")),
+                "maintenance": sum(
+                    1 for item in devices if (item.get("maintenance") or {}).get("enabled")
+                ),
+                "critical": sum(
+                    1
+                    for item in alerts
+                    if item.get("severity") == "critical" and not item.get("acknowledged")
+                ),
+                "warning": sum(
+                    1
+                    for item in alerts
+                    if item.get("severity") == "warning" and not item.get("acknowledged")
+                ),
             },
         },
     )
@@ -544,7 +574,9 @@ async def websocket_ops_device(hass, connection, msg) -> None:
 @websocket_api.async_response
 async def websocket_ops_refresh(hass, connection, msg) -> None:
     await _monitor_cycle(hass)
-    connection.send_result(msg["id"], {"ok": True, "last_cycle": _runtime(hass).get("last_cycle", "")})
+    connection.send_result(
+        msg["id"], {"ok": True, "last_cycle": _runtime(hass).get("last_cycle", "")}
+    )
 
 
 @websocket_api.websocket_command(
@@ -570,7 +602,9 @@ async def websocket_ops_maintenance_set(hass, connection, msg) -> None:
         note=msg.get("note", ""),
         actor=actor,
     )
-    await base._remote_store(hass).async_add_event(  # noqa: SLF001
+    await base._remote_store(
+        hass
+    ).async_add_event(  # noqa: SLF001
         msg["entry_id"],
         "maintenance_enabled" if msg["enabled"] else "maintenance_disabled",
         actor=actor,
@@ -610,7 +644,16 @@ async def websocket_ops_auto_recovery_set(hass, connection, msg) -> None:
         msg["entry_id"],
         "auto_recovery_settings_updated",
         actor=actor,
-        details={key: state[key] for key in ("enabled", "hdmi_reset", "cooldown_seconds", "max_attempts_per_hour", "notify")},
+        details={
+            key: state[key]
+            for key in (
+                "enabled",
+                "hdmi_reset",
+                "cooldown_seconds",
+                "max_attempts_per_hour",
+                "notify",
+            )
+        },
     )
     connection.send_result(msg["id"], state)
 
@@ -633,10 +676,17 @@ async def websocket_ops_alert_ack(hass, connection, msg) -> None:
             alert["acknowledged"] = True
             persistent_notification.async_dismiss(
                 hass,
-                notification_id=_notification_id(msg["entry_id"], str(alert.get("type") or "alert")),
+                notification_id=_notification_id(
+                    msg["entry_id"], str(alert.get("type") or "alert")
+                ),
             )
-    await base._remote_store(hass).async_add_event(  # noqa: SLF001
-        msg["entry_id"], "alert_acknowledged", actor=actor, details={"alert_id": msg["alert_id"][:160]}
+    await base._remote_store(
+        hass
+    ).async_add_event(  # noqa: SLF001
+        msg["entry_id"],
+        "alert_acknowledged",
+        actor=actor,
+        details={"alert_id": msg["alert_id"][:160]},
     )
     connection.send_result(msg["id"], {"ok": True})
 
@@ -645,7 +695,9 @@ async def websocket_ops_alert_ack(hass, connection, msg) -> None:
     {
         vol.Required("type"): f"{DOMAIN}/panel/ops/recovery/action",
         vol.Required("entry_id"): str,
-        vol.Required("action"): vol.In({"diagnose", "safe_recovery", "reset_hid", "reset_hdmi", "reboot_nanokvm"}),
+        vol.Required("action"): vol.In(
+            {"diagnose", "safe_recovery", "reset_hid", "reset_hdmi", "reboot_nanokvm"}
+        ),
     }
 )
 @websocket_api.require_admin
@@ -696,7 +748,9 @@ async def websocket_ops_recovery_action(hass, connection, msg) -> None:
         recovery.update(
             {
                 "state": "success",
-                "message": "Diagnostics completed" if action == "diagnose" else "Recovery action completed",
+                "message": "Diagnostics completed"
+                if action == "diagnose"
+                else "Recovery action completed",
                 "updated_at": _utcnow(),
                 "duration_ms": duration_ms,
             }
@@ -706,12 +760,19 @@ async def websocket_ops_recovery_action(hass, connection, msg) -> None:
         )
         if action != "reboot_nanokvm":
             await _probe_device(hass, msg["entry_id"], allow_recovery=False)
-        connection.send_result(msg["id"], {"ok": True, "recovery": deepcopy(recovery), "device": _device_view(hass, msg["entry_id"])})
-    except (NanoKVMError, ValueError) as err:
-        recovery.update(
-            {"state": "error", "message": str(err)[:200], "updated_at": _utcnow()}
+        connection.send_result(
+            msg["id"],
+            {
+                "ok": True,
+                "recovery": deepcopy(recovery),
+                "device": _device_view(hass, msg["entry_id"]),
+            },
         )
-        await base._remote_store(hass).async_add_event(  # noqa: SLF001
+    except (NanoKVMError, ValueError) as err:
+        recovery.update({"state": "error", "message": str(err)[:200], "updated_at": _utcnow()})
+        await base._remote_store(
+            hass
+        ).async_add_event(  # noqa: SLF001
             msg["entry_id"],
             f"recovery_{action}",
             actor=actor,

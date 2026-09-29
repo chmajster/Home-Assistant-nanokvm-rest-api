@@ -98,3 +98,15 @@ test('refresh discovers newly saved devices and clears resolved warnings', async
   assert.equal(ui.getElement('integration-diagnostics').innerHTML, '');
   assert.doesNotMatch(ui.getElement('content').innerHTML, /data-action="power_on"[^>]*disabled/);
 });
+
+test('JetKVM tile uses shared inventory, shows measured status and hides Nano-only power actions', async () => {
+  const ui = await manager([response([{entry_id:'jet1',title:'LAN Jet',provider:'jetkvm',base_url:'http://192.168.1.50',loaded:true,available:true,last_latency_ms:3,last_seen_at:'2026-09-29T00:00:00Z',capabilities:{video:true,keyboard:true,mouse:true,atx:false,wol:true,native_management:false}}])]);
+  const html=ui.getElement('content').innerHTML;
+  assert.match(html,/JetKVM/);assert.match(html,/LAN Jet/);assert.match(html,/192\.168\.1\.50/);assert.match(html,/3 ms/);assert.match(html,/Live KVM/);
+  assert.doesNotMatch(html,/data-action="power_on"/);assert.doesNotMatch(html,/data-action="reset"/);
+});
+
+test('mixed NanoKVM and JetKVM inventory retains both provider labels', async () => {
+ const ui=await manager([response([{entry_id:'n',title:'Native Nano',loaded:true,available:true},{entry_id:'j',title:'Jet',provider:'jetkvm',loaded:true,available:true,capabilities:{video:true,wol:true}}])]);
+ const html=ui.getElement('content').innerHTML;assert.match(html,/Native Nano/);assert.match(html,/NanoKVM/);assert.match(html,/JetKVM/);
+});

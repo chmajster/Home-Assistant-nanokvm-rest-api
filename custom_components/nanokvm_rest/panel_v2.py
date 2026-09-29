@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Any
 
-from aiohttp import web
 import voluptuous as vol
-
+from aiohttp import web
 from homeassistant.components import panel_custom, websocket_api
 from homeassistant.components.http import KEY_HASS, HomeAssistantView, StaticPathConfig
 from homeassistant.config_entries import ConfigEntryState
@@ -33,6 +32,7 @@ from .management import (
     async_set_cdrom_mode,
     validate_offline_update,
 )
+from .providers.registry import native_entries, provider_name, provider_spec, runtime_provider
 from .remote_store import RemoteServerStore
 
 PANEL_URL = "nanokvm-remote-server"
@@ -52,6 +52,7 @@ def _loaded_coordinator(hass: HomeAssistant, entry_id: str) -> NanoKVMCoordinato
         or entry.domain != DOMAIN
         or entry.state is not ConfigEntryState.LOADED
         or not hasattr(entry, "runtime_data")
+        or not provider_spec(entry.data).native_management
     ):
         return None
     return entry.runtime_data
@@ -69,36 +70,8 @@ def _remote_store(hass: HomeAssistant) -> RemoteServerStore:
 
 
 def _coordinator_summary(coordinator: NanoKVMCoordinator) -> dict[str, Any]:
-    """Build a serializable summary for the frontend."""
-    data = coordinator.data or {}
-    gpio = data.get("gpio") or {}
-    hdmi = data.get("hdmi")
-    info = data.get("info") or {}
-    hostname = data.get("hostname") or {}
-    hardware = data.get("hardware") or {}
-    version = data.get("application_version") or {}
-    capabilities = data.get("capabilities") or {}
-    return {
-        "available": coordinator.last_update_success,
-        "device_key": str(info.get("deviceKey") or coordinator.client.base_url),
-        "hostname": str(hostname.get("hostname") or coordinator.config_entry.title),
-        "hardware": str(hardware.get("version") or ""),
-        "power": bool(gpio.get("pwr")) if "pwr" in gpio else None,
-        "hdd": bool(gpio.get("hdd")) if "hdd" in gpio else None,
-        "hdmi_signal": (
-            bool(hdmi.get("signal"))
-            if isinstance(hdmi, dict) and "signal" in hdmi
-            else None
-        ),
-        "admin": bool(capabilities.get("admin")),
-        "pcie": bool(capabilities.get("pcie")),
-        "application_version": str(
-            version.get("current")
-            or version.get("version")
-            or version.get("installed")
-            or ""
-        ),
-    }
+    """Build a common summary using the selected device's provider."""
+    return runtime_provider(coordinator).get_status()
 
 
 def _health(summary: dict[str, Any]) -> dict[str, Any]:
@@ -146,11 +119,19 @@ async def websocket_list_devices(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """List all configured NanoKVM devices for the dashboard."""
+    """Keep the pre-existing Nano-only sidebar and API backward compatible."""
+    connection.send_result(msg["id"], await async_device_inventory(hass, native_entries(hass)))
+
+
+async def async_device_inventory(hass, entries):
+    """Build one inventory shape for legacy NanoKVM and multi-provider clients."""
     store = _remote_store(hass)
     devices: list[dict[str, Any]] = []
-    for entry in hass.config_entries.async_entries(DOMAIN):
+    for entry in entries:
         item: dict[str, Any] = {
+            "provider": provider_name(entry.data),
+            "transport": provider_spec(entry.data).transport,
+            "capabilities": provider_spec(entry.data).adapter(None).get_capabilities(),
             "entry_id": entry.entry_id,
             "title": entry.title,
             "base_url": str(entry.data.get(CONF_BASE_URL) or ""),
@@ -171,7 +152,8 @@ async def websocket_list_devices(
                 }
             )
         item.update(_public_metadata(store, entry.entry_id))
-        item["health"] = _health(item)
+        if provider_spec(entry.data).native_management:
+            item["health"] = _health(item)
         await store.async_observe_state(entry.entry_id, item)
         devices.append(item)
 
@@ -182,12 +164,14 @@ async def websocket_list_devices(
             str(item.get("hostname") or item.get("title") or "").casefold(),
         )
     )
-    groups = sorted({str(item.get("group")) for item in devices if item.get("group")}, key=str.casefold)
+    groups = sorted(
+        {str(item.get("group")) for item in devices if item.get("group")}, key=str.casefold
+    )
     tags = sorted(
         {str(tag) for item in devices for tag in (item.get("tags") or []) if tag},
         key=str.casefold,
     )
-    connection.send_result(msg["id"], {"devices": devices, "groups": groups, "tags": tags})
+    return {"devices": devices, "groups": groups, "tags": tags}
 
 
 @websocket_api.websocket_command(
@@ -286,9 +270,7 @@ async def websocket_device_action(
         elif action == "force_off":
             if bool((coordinator.data.get("gpio") or {}).get("pwr")):
                 duration = int(
-                    coordinator.config_entry.options.get(
-                        CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS
-                    )
+                    coordinator.config_entry.options.get(CONF_FORCE_OFF_MS, DEFAULT_FORCE_OFF_MS)
                 )
                 details["duration_ms"] = duration
                 await client.async_press_button("power", duration)

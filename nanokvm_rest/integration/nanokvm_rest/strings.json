@@ -2,11 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to NanoKVM",
-        "description": "Step 1 of 3: verify that the address belongs to a NanoKVM API over HTTP/HTTPS. Credentials are not sent during this step.",
+        "title": "Add a KVM device",
+        "description": "Select NanoKVM or JetKVM and enter its address. NanoKVM retains staged setup; JetKVM tests connectivity and the optional local password.",
         "data": {
-          "base_url": "NanoKVM address",
-          "verify_ssl": "Verify TLS certificate"
+          "base_url": "IP address / hostname",
+          "verify_ssl": "Verify TLS certificate",
+          "provider": "Device type"
         },
         "data_description": {
           "base_url": "For example 192.168.1.50 or nanokvm.local. A full HTTP or HTTPS address is also accepted."
@@ -25,43 +26,104 @@
         "description": "Step 3 of 3: authentication succeeded. Add {title} ({device_key}) at {base_url} to Home Assistant."
       },
       "reauth_confirm": {
-        "title": "Reauthenticate NanoKVM",
-        "description": "Authentication failed. Enter valid NanoKVM credentials.",
+        "title": "KVM device configuration",
+        "description": "Change the connection or password. An empty password keeps the previous one. New settings are tested before replacing the existing configuration.",
         "data": {
           "username": "Username",
-          "password": "Password"
+          "password": "Local password (optional)",
+          "title": "Device name",
+          "base_url": "IPv4, IPv6 or DNS host (optional :port and https://)",
+          "verify_ssl": "Verify TLS certificate",
+          "certificate_sha256": "SHA-256 certificate fingerprint (optional)",
+          "lan_networks": "Additional LAN subnets (comma-separated CIDRs)"
         }
       },
       "reconfigure": {
-        "title": "Reconfigure NanoKVM",
-        "description": "Change connection settings. Leave password empty to keep the current password.",
+        "title": "KVM device configuration",
+        "description": "Change the connection or password. An empty password keeps the previous one. New settings are tested before replacing the existing configuration.",
         "data": {
-          "base_url": "NanoKVM address",
+          "base_url": "IPv4, IPv6 or DNS host (optional :port and https://)",
           "username": "Username",
-          "password": "New password (optional)",
-          "verify_ssl": "Verify TLS certificate"
+          "password": "Local password (optional)",
+          "verify_ssl": "Verify TLS certificate",
+          "title": "Device name",
+          "certificate_sha256": "SHA-256 certificate fingerprint (optional)",
+          "lan_networks": "Additional LAN subnets (comma-separated CIDRs)"
+        }
+      },
+      "jetkvm": {
+        "title": "JetKVM LAN",
+        "description": "Enter an address and a password only when local authentication is enabled. Home Assistant performs a real connection test; defaults are HTTP and port 80.",
+        "data": {
+          "title": "Device name",
+          "base_url": "IPv4, IPv6 or DNS host (optional :port and https://)",
+          "password": "Local password (optional)",
+          "verify_ssl": "Verify TLS certificate",
+          "certificate_sha256": "SHA-256 certificate fingerprint (optional)",
+          "lan_networks": "Additional LAN subnets (comma-separated CIDRs)"
         }
       }
     },
     "error": {
       "cannot_connect": "Unable to reach a valid NanoKVM API. Check the address, port, VLAN/firewall rules and whether Home Assistant can reach the device.",
       "invalid_auth": "Invalid NanoKVM username or password.",
-      "invalid_url": "Invalid NanoKVM address.",
-      "permission_denied": "The NanoKVM account does not have permission to access a required setup endpoint. Try an administrator account or adjust account permissions.",
-      "ssl_error": "TLS certificate validation failed. Verify the hostname/certificate, or disable TLS certificate verification only if you trust this NanoKVM and its network."
+      "invalid_url": "Enter a valid IPv4, IPv6 or DNS host and port 1–65535.",
+      "permission_denied": "The device does not permit this operation for the current session.",
+      "ssl_error": "TLS certificate validation failed. Verify the hostname/certificate, or disable TLS certificate verification only if you trust this NanoKVM and its network.",
+      "forbidden_target": "The address is outside allowed LAN networks or points to a protected local service.",
+      "dns_error": "DNS lookup failed. Check the hostname and Home Assistant DNS/mDNS configuration.",
+      "connection_refused": "The device refused the connection. Check its power and configured port.",
+      "timeout": "The device did not respond in time. Check LAN connectivity.",
+      "tls_error": "TLS verification failed. Check the device certificate and protocol.",
+      "unreachable": "The device is unreachable. Check its address, routing and firewall.",
+      "not_jetkvm": "The host responds but does not expose a compatible JetKVM local API.",
+      "setup_required": "Complete first-time JetKVM setup in its local interface.",
+      "authentication_required": "JetKVM requires a local password. Add it to the device configuration.",
+      "invalid_password": "The device rejected the password. Correct the credentials and test again.",
+      "rate_limited": "Too many attempts. Wait before retrying.",
+      "protocol_error": "The device returned an invalid KVM protocol response.",
+      "busy": "This device already has an active Manager KVM session. Disconnect it first.",
+      "unsupported": "This feature is not available for this device or transport.",
+      "session_required": "This operation requires an active Live KVM session.",
+      "unknown_provider": "Unsupported KVM provider.",
+      "secret_storage": "Unable to access KVM secret storage. Check the key and file permissions.",
+      "wrong_device": "The new address belongs to a different device. The previous configuration was not changed.",
+      "invalid_data": "Invalid device configuration.",
+      "not_found": "The KVM device was not found."
     },
     "abort": {
-      "already_configured": "This NanoKVM device is already configured.",
+      "already_configured": "This KVM device is already configured.",
       "reauth_successful": "NanoKVM credentials were updated.",
       "reconfigure_successful": "NanoKVM configuration was updated.",
       "setup_restart": "The staged setup session is no longer valid. Start device setup again.",
-      "wrong_device": "The supplied settings point to a different NanoKVM device."
+      "wrong_device": "The new address belongs to a different device. The previous configuration was not changed.",
+      "invalid_url": "Enter a valid IPv4, IPv6 or DNS host and port 1–65535.",
+      "forbidden_target": "The address is outside allowed LAN networks or points to a protected local service.",
+      "dns_error": "DNS lookup failed. Check the hostname and Home Assistant DNS/mDNS configuration.",
+      "connection_refused": "The device refused the connection. Check its power and configured port.",
+      "timeout": "The device did not respond in time. Check LAN connectivity.",
+      "tls_error": "TLS verification failed. Check the device certificate and protocol.",
+      "unreachable": "The device is unreachable. Check its address, routing and firewall.",
+      "not_jetkvm": "The host responds but does not expose a compatible JetKVM local API.",
+      "setup_required": "Complete first-time JetKVM setup in its local interface.",
+      "authentication_required": "JetKVM requires a local password. Add it to the device configuration.",
+      "invalid_password": "The device rejected the password. Correct the credentials and test again.",
+      "rate_limited": "Too many attempts. Wait before retrying.",
+      "protocol_error": "The device returned an invalid KVM protocol response.",
+      "permission_denied": "The device does not permit this operation for the current session.",
+      "busy": "This device already has an active Manager KVM session. Disconnect it first.",
+      "unsupported": "This feature is not available for this device or transport.",
+      "session_required": "This operation requires an active Live KVM session.",
+      "unknown_provider": "Unsupported KVM provider.",
+      "secret_storage": "Unable to access KVM secret storage. Check the key and file permissions.",
+      "invalid_data": "Invalid device configuration.",
+      "not_found": "The KVM device was not found."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "NanoKVM options",
+        "title": "KVM device options",
         "data": {
           "show_sidebar_panel": "Add Remote Server to the Home Assistant sidebar",
           "scan_interval": "Polling interval (seconds)",
@@ -69,7 +131,7 @@
         },
         "data_description": {
           "show_sidebar_panel": "Show or hide the administrator-only Remote Server panel in the Home Assistant sidebar. With multiple NanoKVM entries, the panel stays visible while at least one entry has this option enabled.",
-          "scan_interval": "How often Home Assistant refreshes NanoKVM state (30–3600 seconds).",
+          "scan_interval": "JetKVM: 10–30 seconds. NanoKVM retains its existing 30–3600 seconds interval.",
           "force_off_ms": "How long the power button is held for Force off (1000–10000 ms)."
         }
       }

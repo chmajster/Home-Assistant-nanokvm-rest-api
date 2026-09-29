@@ -1,132 +1,252 @@
 <!doctype html>
 <html lang="pl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#08111f">
-  <title>NanoKVM Manager</title>
-  <link rel="stylesheet" href="static/style.css?v={{ version }}">
-  <link rel="stylesheet" href="static/device-setup.css?v={{ version }}">
-</head>
-<body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">NK</div>
-        <div><strong>NanoKVM Manager</strong><small>Home Assistant</small></div>
-      </div>
-      <nav>
-        <button class="nav active" data-view="overview">Dashboard</button>
-        <button class="nav" data-view="devices">Urządzenia</button>
-        <button class="nav" data-view="live">Live KVM</button>
-        <button class="nav" data-view="operations">Operations</button>
-        <button class="nav" data-view="alerts">Alert Center</button>
-        <button class="nav" data-view="updates">Update Center</button>
-        <button class="nav" data-view="media">Virtual Media</button>
-        <button class="nav" data-view="hid">HID Toolbox</button>
-      </nav>
-      <div class="sidebar-footer">v{{ version }}</div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <div class="topbar-title">
-          <h1 id="page-title">Dashboard</h1>
-          <p id="page-subtitle">Centrum zdalnego zarządzania NanoKVM</p>
-        </div>
-        <div class="top-actions">
-          <button class="btn" id="add-device">Dodaj urządzenie</button>
-          <button class="btn ghost" id="open-live">Live KVM</button>
-          <button class="btn primary" id="refresh">Odśwież</button>
-        </div>
-      </header>
-
-      <div id="notice" class="notice hidden"></div>
-      <section id="content" class="content"><div class="loading">Ładowanie…</div></section>
-    </main>
-  </div>
-
-  <nav class="mobile-nav" aria-label="Nawigacja NanoKVM Manager">
-    <button data-view="overview" class="active"><span>Start</span></button>
-    <button data-view="devices"><span>KVM</span></button>
-    <button data-view="live"><span>Live</span></button>
-    <button data-view="operations"><span>Ops</span></button>
-    <button data-view="alerts"><span>Alerty</span></button>
-    <button data-view="updates"><span>Update</span></button>
-    <button data-view="media"><span>Media</span></button>
-    <button data-view="hid"><span>HID</span></button>
-  </nav>
-
-  <dialog id="device-setup-dialog" class="device-setup-dialog">
-    <div class="device-setup-card">
-      <div class="device-setup-head">
-        <div>
-          <h2>Dodaj NanoKVM</h2>
-          <p class="muted">Najpierw sprawdź połączenie, następnie uwierzytelnienie, a dopiero potem dodaj urządzenie.</p>
-        </div>
-        <button class="btn small ghost" id="device-setup-close" type="button">Zamknij</button>
-      </div>
-
-      <form id="device-setup-form" class="device-setup-form" autocomplete="off" onsubmit="return false;">
-        <div class="field">
-          <label for="device-url">Adres NanoKVM</label>
-          <input id="device-url" type="text" placeholder="192.168.1.50 lub https://nanokvm.local" spellcheck="false" required>
-        </div>
-
-        <label class="device-setup-checkbox">
-          <input id="device-verify-ssl" type="checkbox" checked>
-          <span>Weryfikuj certyfikat SSL</span>
-        </label>
-
-        <div class="device-setup-grid">
-          <div class="field">
-            <label for="device-username">Użytkownik</label>
-            <input id="device-username" type="text" value="admin" autocomplete="username" required>
-          </div>
-          <div class="field">
-            <label for="device-password">Hasło</label>
-            <input id="device-password" type="password" autocomplete="current-password" required>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#08111f" />
+    <title>NanoKVM Manager</title>
+    <link rel="stylesheet" href="static/style.css?v={{ version }}" />
+    <link rel="stylesheet" href="static/device-setup.css?v={{ version }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">NK</div>
+          <div>
+            <strong>NanoKVM Manager</strong><small>Home Assistant</small>
           </div>
         </div>
+        <nav>
+          <button class="nav active" data-view="overview">Dashboard</button>
+          <button class="nav" data-view="devices">Urządzenia</button>
+          <button class="nav" data-view="live">Live KVM</button>
+          <button class="nav" data-view="operations">Operations</button>
+          <button class="nav" data-view="alerts">Alert Center</button>
+          <button class="nav" data-view="updates">Update Center</button>
+          <button class="nav" data-view="media">Virtual Media</button>
+          <button class="nav" data-view="hid">HID Toolbox</button>
+        </nav>
+        <div class="sidebar-footer">v{{ version }}</div>
+      </aside>
 
-        <div class="device-setup-steps">
-          <div class="setup-step pending" data-setup-step="connection">
-            <span class="setup-step-number">1</span>
-            <div>
-              <strong>Test połączenia</strong>
-              <div class="setup-step-text">Sprawdzimy, czy host odpowiada po HTTP lub HTTPS. Dane logowania nie są wysyłane.</div>
-            </div>
+      <main class="main">
+        <header class="topbar">
+          <div class="topbar-title">
+            <h1 id="page-title">Dashboard</h1>
+            <p id="page-subtitle">Centrum zdalnego zarządzania NanoKVM</p>
           </div>
-          <div class="setup-step pending" data-setup-step="auth">
-            <span class="setup-step-number">2</span>
-            <div>
-              <strong>Test autentykacji</strong>
-              <div class="setup-step-text">Najpierw wykonaj test połączenia, potem sprawdź login i hasło.</div>
-            </div>
+          <div class="top-actions">
+            <button class="btn" id="scan-devices">Skanuj sieć</button>
+            <button class="btn" id="add-device">Dodaj urządzenie</button>
+            <button class="btn ghost" id="open-live">Live KVM</button>
+            <button class="btn primary" id="refresh">Odśwież</button>
           </div>
-          <div class="setup-step pending" data-setup-step="create">
-            <span class="setup-step-number">3</span>
-            <div>
-              <strong>Dodanie do Home Assistant</strong>
-              <div class="setup-step-text">Urządzenie zostanie dodane dopiero po poprawnej autentykacji.</div>
-            </div>
-          </div>
-        </div>
+        </header>
 
-        <div id="device-identity" class="device-identity"></div>
-
-        <div class="device-setup-actions">
-          <button class="btn" id="device-test-connection" type="button">1. Test połączenia</button>
-          <button class="btn" id="device-test-auth" type="button" disabled>2. Test autentykacji</button>
-          <button class="btn primary" id="device-create" type="button" disabled>3. Dodaj urządzenie</button>
-        </div>
-      </form>
+        <div id="notice" class="notice hidden"></div>
+        <section id="content" class="content">
+          <div class="loading">Ładowanie…</div>
+        </section>
+      </main>
     </div>
-  </dialog>
 
-  <script src="static/remote-console-controller.js?v={{ version }}"></script>
-  <script src="static/app.js?v={{ version }}"></script>
-  <script src="static/device-setup.js?v={{ version }}"></script>
-</body>
+    <nav class="mobile-nav" aria-label="Nawigacja NanoKVM Manager">
+      <button data-view="overview" class="active"><span>Start</span></button>
+      <button data-view="devices"><span>KVM</span></button>
+      <button data-view="live"><span>Live</span></button>
+      <button data-view="operations"><span>Ops</span></button>
+      <button data-view="alerts"><span>Alerty</span></button>
+      <button data-view="updates"><span>Update</span></button>
+      <button data-view="media"><span>Media</span></button>
+      <button data-view="hid"><span>HID</span></button>
+    </nav>
+
+    <dialog id="device-setup-dialog" class="device-setup-dialog">
+      <div class="device-setup-card">
+        <div class="device-setup-head">
+          <div>
+            <h2 id="device-setup-title">Dodaj urządzenie KVM</h2>
+            <p class="muted">
+              NanoKVM i JetKVM przez LAN. Najpierw sprawdź połączenie, następnie
+              zapisz urządzenie.
+            </p>
+          </div>
+          <button class="btn small ghost" id="device-setup-close" type="button">
+            Zamknij
+          </button>
+        </div>
+
+        <form
+          id="device-setup-form"
+          class="device-setup-form"
+          autocomplete="off"
+          onsubmit="return false;"
+        >
+          <div class="device-setup-grid">
+            <div class="field">
+              <label for="device-provider">Typ urządzenia</label
+              ><select id="device-provider">
+                <option value="nanokvm">NanoKVM</option>
+                <option value="jetkvm">JetKVM</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="device-name">Nazwa urządzenia</label
+              ><input id="device-name" maxlength="128" required />
+            </div>
+          </div>
+          <div class="field">
+            <label for="device-url">Adres IP / hostname</label
+            ><input
+              id="device-url"
+              placeholder="192.168.1.50 · jetkvm.local · [fd00::50]:8080"
+              spellcheck="false"
+              required
+            />
+          </div>
+          <div class="device-setup-grid">
+            <div class="field">
+              <label for="device-protocol">Protokół</label
+              ><select id="device-protocol">
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="device-port">Port</label
+              ><input
+                id="device-port"
+                type="number"
+                min="1"
+                max="65535"
+                value="80"
+                required
+              />
+            </div>
+          </div>
+          <div class="device-setup-grid">
+            <div class="field" id="device-username-group">
+              <label for="device-username">Użytkownik</label
+              ><input
+                id="device-username"
+                value="admin"
+                autocomplete="username"
+              />
+            </div>
+            <div class="field">
+              <label for="device-password" id="device-password-label"
+                >Hasło</label
+              ><input
+                id="device-password"
+                type="password"
+                autocomplete="new-password"
+              /><small class="muted" id="device-password-help"></small>
+            </div>
+          </div>
+          <label id="device-clear-password-group" hidden
+            ><input id="device-clear-password" type="checkbox" /> Usuń zapisane
+            hasło (tryb bez hasła)</label
+          >
+          <details>
+            <summary>Ustawienia TLS i sieci LAN</summary>
+            <label class="device-setup-checkbox"
+              ><input id="device-selfsigned" type="checkbox" /> Zaufaj
+              certyfikatowi self-signed (tylko to urządzenie)</label
+            >
+            <p id="device-tls-warning" class="muted" hidden>
+              Bez przypiętego odcisku certyfikatu ta opcja wyłącza weryfikację
+              tożsamości urządzenia. Bezpieczniejszy jest zaufany certyfikat lub
+              zweryfikowany odcisk SHA-256.
+            </p>
+            <div class="field">
+              <label for="device-fingerprint"
+                >Odcisk certyfikatu SHA-256 (JetKVM, opcjonalnie)</label
+              ><input
+                id="device-fingerprint"
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </div>
+            <div class="field">
+              <label for="device-networks"
+                >Dodatkowe zaufane podsieci LAN (CIDR, rozdziel
+                przecinkiem)</label
+              ><input
+                id="device-networks"
+                spellcheck="false"
+                placeholder="Domyślnie RFC1918, IPv6 ULA i link-local"
+              />
+            </div>
+          </details>
+          <section id="device-error" role="alert" hidden>
+            <p id="device-error-message"></p>
+            <details>
+              <summary>Szczegóły błędu</summary>
+              <pre id="device-error-detail"></pre>
+            </details>
+          </section>
+
+          <div class="device-setup-steps">
+            <div class="setup-step pending" data-setup-step="connection">
+              <span class="setup-step-number">1</span>
+              <div>
+                <strong>Test połączenia</strong>
+                <div class="setup-step-text">
+                  Sprawdzimy, czy host odpowiada po HTTP lub HTTPS. Dane
+                  logowania nie są wysyłane.
+                </div>
+              </div>
+            </div>
+            <div class="setup-step pending" data-setup-step="auth">
+              <span class="setup-step-number">2</span>
+              <div>
+                <strong>Test autentykacji</strong>
+                <div class="setup-step-text">
+                  Najpierw wykonaj test połączenia, potem sprawdź login i hasło.
+                </div>
+              </div>
+            </div>
+            <div class="setup-step pending" data-setup-step="create">
+              <span class="setup-step-number">3</span>
+              <div>
+                <strong>Dodanie do Home Assistant</strong>
+                <div class="setup-step-text">
+                  Urządzenie zostanie dodane dopiero po poprawnej autentykacji.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="device-identity" class="device-identity"></div>
+
+          <div class="device-setup-actions">
+            <button class="btn" id="device-test-connection" type="button">
+              1. Test połączenia
+            </button>
+            <button class="btn" id="device-test-auth" type="button" disabled>
+              2. Test autentykacji
+            </button>
+            <button
+              class="btn primary"
+              id="device-create"
+              type="button"
+              disabled
+            >
+              3. Dodaj urządzenie
+            </button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <script src="static/remote-console-controller.js?v={{ version }}"></script>
+    <script src="static/jetkvm-console-controller.js?v={{ version }}"></script>
+    <script src="static/app.js?v={{ version }}"></script>
+    <script src="static/device-setup.js?v={{ version }}"></script>
+  </body>
 </html>

@@ -13,6 +13,7 @@ from . import panel_v2 as base
 from .advanced_store import RemoteAdvancedStore
 from .console import NanoKVMConsoleView, websocket_console_session
 from .const import DOMAIN
+from .kvm_api import KVM_COMMANDS
 from .operations import OPERATIONS_COMMANDS, async_setup_operations
 from .panel_ext import (
     DATA_ADVANCED_STORE,
@@ -60,6 +61,7 @@ async def async_setup_panel_backend(hass: HomeAssistant) -> None:
             *base_commands,
             *EXTENDED_COMMANDS,
             *OPERATIONS_COMMANDS,
+            *KVM_COMMANDS,
             websocket_console_session,
         ):
             websocket_api.async_register_command(hass, command)

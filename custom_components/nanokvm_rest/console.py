@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import time
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
-from aiohttp import WSMsgType, web
 import voluptuous as vol
-
+from aiohttp import web
 from homeassistant.components import websocket_api
 from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.config_entries import ConfigEntryState
@@ -19,12 +19,16 @@ from homeassistant.core import HomeAssistant
 
 from .const import COOKIE_NAME, DOMAIN
 from .coordinator import NanoKVMCoordinator
+from .providers.errors import KVMError
+from .providers.jetkvm import network_error
+from .providers.registry import runtime_provider
+from .providers.signaling import RELAYS
 
+_LOGGER = logging.getLogger(__name__)
+DATA_ACTIVE_CONSOLES = f"{DOMAIN}_active_consoles"
 DATA_CONSOLE_SESSIONS = f"{DOMAIN}_console_sessions"
 CONSOLE_PROTOCOL = "nanokvm-console"
 CONSOLE_SESSION_TTL = 30
-CONSOLE_MAX_INCOMING = 64 * 1024
-UPSTREAM_STREAM_MAX = 4 * 1024 * 1024
 
 
 def _loaded_coordinator(hass: HomeAssistant, entry_id: str) -> NanoKVMCoordinator | None:
@@ -75,14 +79,15 @@ async def _open_upstream_ws(
         if token:
             headers["Cookie"] = f"{COOKIE_NAME}={token}"
         try:
-            return await session.ws_connect(
-                _upstream_ws_url(base_url, path),
-                headers=headers,
-                params=params,
-                max_msg_size=max_msg_size,
-                autoping=True,
-                autoclose=True,
-            )
+            async with asyncio.timeout(8):
+                return await session.ws_connect(
+                    _upstream_ws_url(base_url, path),
+                    headers=headers,
+                    params=params,
+                    max_msg_size=max_msg_size,
+                    autoping=True,
+                    autoclose=True,
+                )
         except aiohttp.WSServerHandshakeError as err:
             if err.status == 401 and attempt == 0:
                 setattr(client, "_logged_in", False)
@@ -111,6 +116,14 @@ async def websocket_console_session(
         connection.send_error(msg["id"], "not_loaded", "NanoKVM is not loaded")
         return
 
+    provider = runtime_provider(coordinator)
+    active = hass.data.setdefault(DATA_ACTIVE_CONSOLES, {}).get(msg["entry_id"], set())
+    if provider.transport == "webrtc" and active:
+        connection.send_error(msg["id"], "busy", KVMError("busy").message)
+        return
+    if len(_sessions(hass)) >= 128:
+        connection.send_error(msg["id"], "rate_limited", KVMError("rate_limited").message)
+        return
     token = f"nkv-{secrets.token_urlsafe(32)}"
     _sessions(hass)[token] = {
         "entry_id": msg["entry_id"],
@@ -124,12 +137,36 @@ async def websocket_console_session(
             "protocol": CONSOLE_PROTOCOL,
             "token": token,
             "expires_in": CONSOLE_SESSION_TTL,
+            "provider": provider.provider_type,
+            "transport": provider.transport,
         },
     )
 
 
+async def async_disconnect_entry(hass: HomeAssistant, entry_id: str) -> int:
+    """Revoke unused tickets and close all Manager sessions for an entry."""
+    for token, item in list(_sessions(hass).items()):
+        if item.get("entry_id") == entry_id:
+            _sessions(hass).pop(token, None)
+    sessions = tuple(hass.data.setdefault(DATA_ACTIVE_CONSOLES, {}).get(entry_id, set()))
+
+    async def close(ws):
+        try:
+            async with asyncio.timeout(3):
+                if ws.prepared and not ws.closed:
+                    await ws.send_json(
+                        {"type": "console", "state": "disconnected", "reason": "user"}
+                    )
+                await ws.close(code=1000, message=b"Manager disconnected session")
+        except (TimeoutError, aiohttp.ClientError):
+            pass
+
+    await asyncio.gather(*(close(ws) for ws in sessions))
+    return len(sessions)
+
+
 class NanoKVMConsoleView(HomeAssistantView):
-    """Bridge Live KVM H.264 and HID WebSockets through Home Assistant."""
+    """One admin-authorized session endpoint with provider-specific transports."""
 
     url = f"/api/{DOMAIN}/console"
     name = f"api:{DOMAIN}:console"
@@ -145,98 +182,61 @@ class NanoKVMConsoleView(HomeAssistantView):
         token = next((value for value in offered if value.startswith("nkv-")), "")
         if CONSOLE_PROTOCOL not in offered or not token:
             raise web.HTTPForbidden(text="Missing Remote Console session")
-
         session_info = _sessions(hass).pop(token, None)
         if not session_info or float(session_info.get("expires", 0)) <= time.monotonic():
             raise web.HTTPForbidden(text="Remote Console session expired")
-
-        coordinator = _loaded_coordinator(hass, str(session_info.get("entry_id") or ""))
+        user = await hass.auth.async_get_user(session_info["user_id"])
+        if user is None or not user.is_active or not user.is_admin:
+            raise web.HTTPForbidden(text="Administrator session is no longer active")
+        entry_id = str(session_info.get("entry_id") or "")
+        coordinator = _loaded_coordinator(hass, entry_id)
         if coordinator is None:
-            raise web.HTTPNotFound(text="NanoKVM is not loaded")
-
-        stream_ws: aiohttp.ClientWebSocketResponse | None = None
-        input_ws: aiohttp.ClientWebSocketResponse | None = None
-        try:
-            stream_ws = await _open_upstream_ws(
-                coordinator,
-                "/api/stream/h264/direct",
-                params={"flow": "8"},
-                max_msg_size=UPSTREAM_STREAM_MAX,
-            )
-            input_ws = await _open_upstream_ws(
-                coordinator,
-                "/api/ws",
-                max_msg_size=CONSOLE_MAX_INCOMING,
-            )
-        except (aiohttp.ClientError, TimeoutError, RuntimeError) as err:
-            if stream_ws is not None:
-                await stream_ws.close()
-            if input_ws is not None:
-                await input_ws.close()
-            raise web.HTTPBadGateway(text=f"Unable to open NanoKVM console: {err}") from err
-
-        browser_ws = web.WebSocketResponse(
+            raise web.HTTPNotFound(text="KVM configuration is not loaded")
+        provider = runtime_provider(coordinator)
+        active_store = hass.data.setdefault(DATA_ACTIVE_CONSOLES, {})
+        active = active_store.setdefault(entry_id, set())
+        if provider.transport == "webrtc" and active:
+            raise web.HTTPConflict(text=KVMError("busy").message)
+        browser = web.WebSocketResponse(
             protocols=(CONSOLE_PROTOCOL,),
-            max_msg_size=CONSOLE_MAX_INCOMING,
+            max_msg_size=256 * 1024,
             autoping=True,
             heartbeat=30,
             compress=False,
         )
-        await browser_ws.prepare(request)
-        await browser_ws.send_str('{"type":"console","state":"connected"}')
-
-        async def stream_to_browser() -> None:
-            assert stream_ws is not None
-            async for item in stream_ws:
-                if item.type is WSMsgType.BINARY:
-                    await browser_ws.send_bytes(item.data)
-                elif item.type in {WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR}:
-                    break
-
-        async def input_to_browser() -> None:
-            assert input_ws is not None
-            async for item in input_ws:
-                if item.type is WSMsgType.TEXT:
-                    await browser_ws.send_str(item.data)
-                elif item.type in {WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR}:
-                    break
-
-        async def browser_to_upstreams() -> None:
-            assert stream_ws is not None and input_ws is not None
-            async for item in browser_ws:
-                if item.type is WSMsgType.BINARY:
-                    data = bytes(item.data)
-                    if len(data) < 2:
-                        continue
-                    channel, payload = data[0], data[1:]
-                    if channel == 0:
-                        await stream_ws.send_bytes(payload)
-                    elif channel == 1:
-                        await input_ws.send_bytes(payload)
-                elif item.type in {WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR}:
-                    break
-
-        tasks = {
-            asyncio.create_task(stream_to_browser()),
-            asyncio.create_task(input_to_browser()),
-            asyncio.create_task(browser_to_upstreams()),
-        }
+        # Reserve before the first await, avoiding simultaneous exclusive JetKVM
+        # sessions against upstream's single currentSession.
+        active.add(browser)
+        upstream = None
         try:
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                if not task.cancelled():
-                    task.exception()
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+            await browser.prepare(request)
+            await browser.send_json(
+                {"type": "console", "state": "connecting", "provider": provider.provider_type}
+            )
+            async with asyncio.timeout(15):
+                upstream = await provider.open_kvm_session()
+            await browser.send_json(
+                {"type": "console", "state": "connected", "provider": provider.provider_type}
+            )
+            await RELAYS[provider.transport](provider, upstream, browser)
+        except (KVMError, aiohttp.ClientError, TimeoutError, OSError, RuntimeError) as err:
+            problem = network_error(err)
+            if browser.prepared and not browser.closed:
+                await browser.send_json({"type": "manager-error", "error": problem.public()})
+            _LOGGER.warning("[%s] console failed %s: %s", provider.label, entry_id, problem.code)
         finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await stream_ws.close()
-            await input_ws.close()
-            if not browser_ws.closed:
-                await browser_ws.close()
-
-        return browser_ws
+            try:
+                if upstream is not None:
+                    await provider.close_kvm_session(upstream)
+            finally:
+                active.discard(browser)
+                if not active:
+                    active_store.pop(entry_id, None)
+                if browser.prepared and not browser.closed:
+                    try:
+                        async with asyncio.timeout(3):
+                            await browser.close()
+                    except (TimeoutError, aiohttp.ClientError):
+                        pass
+                _LOGGER.info("[%s] session closed %s", provider.label, entry_id)
+        return browser

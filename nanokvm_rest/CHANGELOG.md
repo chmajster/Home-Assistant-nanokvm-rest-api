@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0
+
+- Adds a JetKVM LAN provider with real local HTTP authentication, backend-only session cookies and native H.264/WebRTC Live KVM.
+- Adds shared provider-aware device setup, editing, deletion, details, tiles/list inventory, status monitoring and opt-in neighbour discovery.
+- Adds JetKVM USB keyboard, Ctrl+Alt+Del, absolute/relative mouse, measured video/RTT stats, runtime-detected ATX controls and authenticated HTTP Wake-on-LAN.
+- Adds LAN target validation, DNS-rebinding protection, no redirects, per-device TLS verification/pinning and bounded retries/timeouts.
+- Migrates existing NanoKVM ConfigEntries to version 2 and encrypts stored credentials in a shared local vault. Back up the vault key with Home Assistant; see docs/jetkvm.md.
+- Preserves NanoKVM clients/entities and native management functions, fixes its OffscreenCanvas reconnection lifecycle and honors explicit disconnection.
+- Adds HTTP/WS/TLS, frontend lifecycle and browser protocol acceptance tests. Physical JetKVM/NanoKVM acceptance remains a separate installation checklist; automated protocol fixtures are not hardware verification.
+
 ## 0.11.14
 
 - Adds embedded **Live KVM** to NanoKVM Manager using the existing authenticated Home Assistant H.264/HID bridge, without exposing NanoKVM credentials to the browser.
