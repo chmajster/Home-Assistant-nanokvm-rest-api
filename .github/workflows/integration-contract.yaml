@@ -41,3 +41,15 @@ jobs:
           node --check nanokvm_rest/webui/static/remote-console-controller.js
           node --check nanokvm_rest/webui/static/remote-console-worker.js
           node --test tests/test_manager_ui.cjs
+
+      - name: Package source snapshot for integration verification
+        if: always()
+        run: git archive --format=tar.gz HEAD -o /tmp/kvm-manager-source.tar.gz
+
+      - name: Upload verification source snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvm-manager-source
+          path: /tmp/kvm-manager-source.tar.gz
+          retention-days: 1
