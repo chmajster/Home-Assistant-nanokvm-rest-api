@@ -13,6 +13,10 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -20,37 +24,49 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
-      - name: Compile integration sources
-        run: |
-          python -m compileall -q custom_components/nanokvm_rest
-          python -m compileall -q nanokvm_rest/integration/nanokvm_rest
-          python -m compileall -q nanokvm_rest/webui
-
-      - name: Run repository contract tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Set up Node.js for Manager UI tests
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Check Manager UI and run regression tests
+      - name: Install isolated verification tools
         run: |
-          node --check nanokvm_rest/webui/static/app.js
-          node --check nanokvm_rest/webui/static/remote-console-controller.js
-          node --check nanokvm_rest/webui/static/remote-console-worker.js
-          node --test tests/test_manager_ui.cjs
+          python -m pip install -r requirements-test.txt
+          npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Package source snapshot for integration verification
+      - name: Format, lint, backend and frontend regression tests
+        run: bash tools/verify_kvm.sh 2>&1 | tee verification.log
+
+      - name: Install test browser
+        run: python -m playwright install --with-deps chromium
+
+      - name: Real browser WebRTC H264 and HID acceptance
+        run: python tests/browser_jetkvm.py 2>&1 | tee browser-verification.log
+
+      - name: Build production app image
+        run: docker build --build-arg BUILD_VERSION=0.12.0 --build-arg BUILD_ARCH=amd64 -t nanokvm-manager:verification nanokvm_rest 2>&1 | tee build-verification.log
+
+      - name: Smoke-test production image
+        run: |
+          docker run --rm --entrypoint /venv/bin/python nanokvm-manager:verification -c 'import sys; sys.path.insert(0,"/opt/webui"); import app; assert app.APP_VERSION == "0.12.0"; assert "nanokvm_rest/panel/kvm/manage" in app.WRITE_COMMANDS'
+          docker run --rm --entrypoint /venv/bin/python nanokvm-manager:verification -m compileall -q /opt/integration /opt/webui
+
+      - name: Capture verification and exact source
         if: always()
-        run: git archive --format=tar.gz HEAD -o /tmp/kvm-manager-source.tar.gz
+        run: |
+          mkdir -p test-results
+          for f in verification.log browser-verification.log build-verification.log; do
+            if [ -f "$f" ]; then cp "$f" test-results/; fi
+          done
+          git rev-parse HEAD > test-results/commit.txt
+          git archive --format=tar.gz HEAD -o test-results/kvm-manager-source.tar.gz
 
-      - name: Upload verification source snapshot
+      - name: Upload verification report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kvm-manager-source
-          path: /tmp/kvm-manager-source.tar.gz
-          retention-days: 1
+          name: kvm-verification
+          path: test-results
+          retention-days: 7
