@@ -389,6 +389,29 @@ async def main(browser_path=None):
             page.once("dialog", lambda d: asyncio.create_task(d.accept("AA:BB:CC:DD:EE:FF")))
             await page.locator("#console-wol").click()
             await wait_for(lambda: bool(rig.wol))
+            await page.wait_for_function(
+                'document.getElementById("console-metrics").textContent.includes("FPS")'
+            )
+            await page.locator("#console-fullscreen").click()
+            await page.wait_for_function('document.fullscreenElement?.id === "console-shell"')
+            viewport_height = await page.evaluate("window.innerHeight")
+            for selector in ("#console-disconnect", "#console-scale", "#console-cad"):
+                assert await page.locator(selector).is_visible()
+                rect = await page.locator(selector).bounding_box()
+                assert 0 <= rect["y"] < viewport_height
+                assert rect["y"] + rect["height"] <= viewport_height
+            await page.locator("#console-scale").select_option("1")
+            await page.wait_for_function(
+                'document.getElementById("console-video").dataset.scale === "1"'
+            )
+            assert await page.locator("#console-video").evaluate(
+                "(v)=>v.getBoundingClientRect().width === v.videoWidth"
+            )
+            await page.locator("#console-scale").select_option("fit")
+            await page.screenshot(path=str(output / "jetkvm-fullscreen.png"))
+            await page.locator("#console-fullscreen").click()
+            await page.wait_for_function("document.fullscreenElement === null")
+            await page.evaluate("window.scrollTo(0, 0)")
             await page.screenshot(path=str(output / "jetkvm-live.png"), full_page=True)
             # Expired device auth followed by an interrupted signaling transport
             # must result in a fresh backend login and another real video track.
@@ -437,6 +460,7 @@ async def main(browser_path=None):
                 "real_webrtc_video": True,
                 "keyboard": True,
                 "ctrl_alt_delete": True,
+                "fullscreen_controls_and_native_scale": True,
                 "absolute_relative_mouse": True,
                 "atx_rpc": True,
                 "wol_http": True,

@@ -387,6 +387,7 @@
           ? '<div class="card console-unavailable">Urządzenie nie jest aktualnie dostępne przez integrację NanoKVM REST.</div>'
           : `
       <div class="live-device-status"><strong>${esc(adapter.label)}</strong> · ${esc(device.base_url)} · ${statusBadge(device.available)} ${adapter.rtc ? "· LAN" : ""}</div>
+      <div id="console-shell" class="console-shell">
       <div class="console-toolbar">
         <label><input id="console-keyboard" type="checkbox" checked> Klawiatura</label>
         <label><input id="console-mouse" type="checkbox" checked> Mysz</label>
@@ -399,7 +400,6 @@
         ${caps.relative_mouse ? '<label>Mysz <select id="console-mouse-mode"><option value="absolute">Absolute</option><option value="relative">Relative / Pointer Lock</option></select></label>' : ""}
         <span id="console-state" class="console-state" data-state="idle">idle</span>
       </div>
-      <div id="console-shell" class="console-shell">
         <div id="console-stage" class="console-stage">
           <div class="console-video-wrap">${adapter.video}</div>
           <div class="console-hint">Kliknij obraz, aby przejąć klawiaturę. Sterowanie myszą działa bezpośrednio na obrazie.</div>

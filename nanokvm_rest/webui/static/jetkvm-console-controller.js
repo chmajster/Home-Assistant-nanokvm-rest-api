@@ -760,6 +760,7 @@
     }
     _scale() {
       if (!this.video) return;
+      this.video.dataset.scale = this.scale;
       this.video.style.width =
         this.scale === "fit" ? "100%" : `${this.video.videoWidth || 1280}px`;
       this.video.style.maxHeight =
